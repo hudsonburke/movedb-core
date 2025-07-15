@@ -8,7 +8,7 @@ A Python library for handling movement/biomechanics data including:
 - Motion capture data management
 """
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 __author__ = "Hudson Burke"
 __email__ = "hudsonburke01@gmail.com"
 
@@ -32,10 +32,10 @@ from .utils import snake_to_pascal
 
 # Conditionally import API module
 # try:
-    # from . import api
-    # _API_AVAILABLE = True
+# from . import api
+# _API_AVAILABLE = True
 # except ImportError:
-    # _API_AVAILABLE = False
+# _API_AVAILABLE = False
 
 __all__ = [
     # Core classes

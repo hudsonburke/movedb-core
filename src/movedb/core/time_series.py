@@ -1,15 +1,19 @@
 """Time series data structures for biomechanical trials."""
-import ezc3d
-from movedb.utils import get_c3d_param
-import numpy as np
-from typing import Annotated
-import polars as pl
-import pandera.polars as pa
-from pandera.typing.polars import DataFrame
-from pydantic import BaseModel, model_validator, AfterValidator
+
 import warnings
+from typing import Annotated
+
+import ezc3d
+import numpy as np
+import pandera.polars as pa
+import polars as pl
+from pandera.typing.polars import DataFrame
+from pydantic import AfterValidator, BaseModel, model_validator
+
+from movedb.utils import get_c3d_param
 
 # TODO: Consolidate data from Analogs and Points so that can share common functionality
+
 
 class TimeSeriesGroup(BaseModel):
     first_frame: int
@@ -44,11 +48,13 @@ class TimeSeriesGroup(BaseModel):
         """
         return np.arange(self.first_frame - 1, self.last_frame - 1) / self.rate
 
+
 class MarkerSchema(pa.DataFrameModel):
     x: float
     y: float
     z: float
     residual: float
+
 
 class MarkerTrajectory(BaseModel):
     """
@@ -56,29 +62,36 @@ class MarkerTrajectory(BaseModel):
     x, y, z, residual, description
     """
 
-    data: Annotated[
-        DataFrame[MarkerSchema],
-        AfterValidator(MarkerSchema.validate)
-    ]
+    data: Annotated[DataFrame[MarkerSchema], AfterValidator(MarkerSchema.validate)]
     description: str = ""
 
     @classmethod
     def from_c3d(cls, c3d_object: ezc3d.c3d, index: int = 0) -> "MarkerTrajectory":
-        """ 
+        """
         Create a MarkerTrajectory from a C3D object.
         """
-        description = get_c3d_param(c3d_object, "POINT", "DESCRIPTIONS", index=index, default=cls.model_fields['description'].default)
+        description = get_c3d_param(
+            c3d_object,
+            "POINT",
+            "DESCRIPTIONS",
+            index=index,
+            default=cls.model_fields["description"].default,
+        )
 
         return cls(
-            data=DataFrame[MarkerSchema]({
-                "x": c3d_object.data["points"][0, index, :].tolist(),
-                "y": c3d_object.data["points"][1, index, :].tolist(),
-                "z": c3d_object.data["points"][2, index, :].tolist(),
-                "residual": c3d_object.data["meta_points"]["residuals"][0, index, :].tolist(),
-            }), 
-            description=description
+            data=DataFrame[MarkerSchema](
+                {
+                    "x": c3d_object.data["points"][0, index, :].tolist(),
+                    "y": c3d_object.data["points"][1, index, :].tolist(),
+                    "z": c3d_object.data["points"][2, index, :].tolist(),
+                    "residual": c3d_object.data["meta_points"]["residuals"][
+                        0, index, :
+                    ].tolist(),
+                }
+            ),
+            description=description,
         )
-        
+
     @property
     def coords(self) -> np.ndarray:
         """Return coordinates as numpy array (n_frames, 3)"""
@@ -96,7 +109,7 @@ class MarkerTrajectory(BaseModel):
 class Points(TimeSeriesGroup):
     units: str = "m"
     trajectories: dict[str, MarkerTrajectory]
-    
+
     @classmethod
     def from_c3d(cls, c3d_object: ezc3d.c3d) -> "Points":
         if not "POINT" in c3d_object.parameters:
@@ -106,8 +119,10 @@ class Points(TimeSeriesGroup):
         header_first_frame = c3d_object.header["points"]["first_frame"]
         header_last_frame = c3d_object.header["points"]["last_frame"]
         header_rate = c3d_object.header["points"]["frame_rate"]
-        
-        camera_rate = get_c3d_param(c3d_object, "TRIAL", "CAMERA_RATE", default=header_rate)
+
+        camera_rate = get_c3d_param(
+            c3d_object, "TRIAL", "CAMERA_RATE", default=header_rate
+        )
         point_rate = get_c3d_param(c3d_object, "POINT", "RATE", default=camera_rate)
         if camera_rate != header_rate:
             warnings.warn(
@@ -117,19 +132,21 @@ class Points(TimeSeriesGroup):
             warnings.warn(
                 f"Point rate {point_rate} does not match camera rate {camera_rate}. Defaulting to point rate."
             )
-        
+
         labels = get_c3d_param(c3d_object, "POINT", "LABELS", default=[])
-        units = get_c3d_param(c3d_object, "POINT", "UNITS", default=[cls.model_fields["units"].default])[0]
+        units = get_c3d_param(
+            c3d_object, "POINT", "UNITS", default=[cls.model_fields["units"].default]
+        )[0]
 
         return cls(
-           first_frame=header_first_frame,
-           last_frame=header_last_frame,
-           rate=point_rate,
-           units=units,
-           trajectories={
+            first_frame=header_first_frame,
+            last_frame=header_last_frame,
+            rate=point_rate,
+            units=units,
+            trajectories={
                 label: MarkerTrajectory.from_c3d(c3d_object, index=i)
                 for i, label in enumerate(labels)
-            }
+            },
         )
 
     @model_validator(mode="after")
@@ -223,7 +240,9 @@ class Points(TimeSeriesGroup):
             residual = [0.0] * n_frames
 
         trajectory = MarkerTrajectory(
-            data=DataFrame[MarkerSchema]({"x": x, "y": y, "z": z, "residual": residual}),
+            data=DataFrame[MarkerSchema](
+                {"x": x, "y": y, "z": z, "residual": residual}
+            ),
             description=description,
         )
         self.trajectories[name] = trajectory
@@ -231,30 +250,56 @@ class Points(TimeSeriesGroup):
 
 class AnalogChannel(BaseModel):
     """Each analog channel can have different units"""
-    data: list[float] #TODO: Should this be a sequence type like np.ndarray?
-    units: str = 'V'
+
+    data: list[float]  # TODO: Should this be a sequence type like np.ndarray?
+    units: str = "V"
     scale: float = 1.0
     offset: float = 0.0
     description: str = ""
-    
+
     @classmethod
     def from_c3d(cls, c3d_obj: ezc3d.c3d, index: int = 0) -> "AnalogChannel":
         analog_data = c3d_obj.data["analogs"][0, index, :].tolist()
-        units = get_c3d_param(c3d_obj, "ANALOG", "UNITS", index=index, default=cls.model_fields['units'].default)
-        scale = get_c3d_param(c3d_obj, "ANALOG", "SCALE", index=index, default=cls.model_fields['scale'].default)
-        offset = get_c3d_param(c3d_obj, "ANALOG", "OFFSET", index=index, default=cls.model_fields['offset'].default)
-        description = get_c3d_param(c3d_obj, "ANALOG", "DESCRIPTIONS", index=index, default=cls.model_fields['description'].default)
-        
+        units = get_c3d_param(
+            c3d_obj,
+            "ANALOG",
+            "UNITS",
+            index=index,
+            default=cls.model_fields["units"].default,
+        )
+        scale = get_c3d_param(
+            c3d_obj,
+            "ANALOG",
+            "SCALE",
+            index=index,
+            default=cls.model_fields["scale"].default,
+        )
+        offset = get_c3d_param(
+            c3d_obj,
+            "ANALOG",
+            "OFFSET",
+            index=index,
+            default=cls.model_fields["offset"].default,
+        )
+        description = get_c3d_param(
+            c3d_obj,
+            "ANALOG",
+            "DESCRIPTIONS",
+            index=index,
+            default=cls.model_fields["description"].default,
+        )
+
         return cls(
             data=analog_data,
             units=units,
             scale=scale,
             offset=offset,
-            description=description
+            description=description,
         )
 
     def __len__(self) -> int:
         return len(self.data)
+
 
 class Analogs(TimeSeriesGroup):
     # Analogs store different channels each of which could have different units
@@ -267,11 +312,11 @@ class Analogs(TimeSeriesGroup):
             raise ValueError("C3D object does not contain ANALOG parameters.")
         if not "analogs" in c3d_object.data:
             raise ValueError("C3D object does not contain analog data.")
-        
+
         header_first_frame = c3d_object.header["analogs"]["first_frame"]
         header_last_frame = c3d_object.header["analogs"]["last_frame"]
         header_rate = c3d_object.header["analogs"]["frame_rate"]
-        
+
         analog_rate = get_c3d_param(c3d_object, "ANALOG", "RATE", default=header_rate)
         if analog_rate != header_rate:
             warnings.warn(
@@ -279,11 +324,11 @@ class Analogs(TimeSeriesGroup):
             )
 
         labels = get_c3d_param(c3d_object, "ANALOG", "LABELS", default=[])
-               
+
         gen_scale = get_c3d_param(c3d_object, "ANALOG", "GEN_SCALE", default=[1.0])[0]
 
         return cls(
-            first_frame=header_first_frame, # TODO: Maybe ignore header and set this based on data?
+            first_frame=header_first_frame,  # TODO: Maybe ignore header and set this based on data?
             last_frame=header_last_frame,
             rate=analog_rate,
             gen_scale=gen_scale,
@@ -292,7 +337,7 @@ class Analogs(TimeSeriesGroup):
                 for i, label in enumerate(labels)
             },
         )
-            
+
     @model_validator(mode="after")
     def validate_channel_lengths(self) -> "Analogs":
         """Ensure all channels have the same length matching total_frames"""

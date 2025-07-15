@@ -145,6 +145,7 @@ make help
 #### Windows (alternatives)
 
 **Option 1: Using our batch script**
+
 ```cmd
 REM Run tests
 scripts\make.bat test
@@ -160,6 +161,7 @@ scripts\make.bat help
 ```
 
 **Option 2: Using PowerShell script**
+
 ```powershell
 # Run tests
 .\scripts\make.ps1 test
@@ -175,6 +177,7 @@ scripts\make.bat help
 ```
 
 **Option 3: Install make for Windows**
+
 - Install via [Chocolatey](https://chocolatey.org/): `choco install make`
 - Install via [Scoop](https://scoop.sh/): `scoop install make`
 - Install [Git for Windows](https://gitforwindows.org/) (includes make)

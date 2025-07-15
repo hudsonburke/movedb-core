@@ -1,6 +1,11 @@
-import ezc3d
 from typing import Any
-def get_c3d_param(c3d_object: ezc3d.c3d, *keys, index: int|None =None, default=None) -> Any:
+
+import ezc3d
+
+
+def get_c3d_param(
+    c3d_object: ezc3d.c3d, *keys, index: int | None = None, default=None
+) -> Any:
     """
     Helper function to get nested parameters from a C3D object.
     """

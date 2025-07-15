@@ -1,14 +1,15 @@
 """
 Refactored Trial class with improved separation of concerns.
 """
-import ezc3d
+
 import os
 import pickle
+import warnings
 from typing import Any, Type, TypeVar
 
+import ezc3d
 import numpy as np
 import polars as pl
-import warnings
 from pydantic import BaseModel, model_validator
 
 from movedb.utils.ezc3d_helpers import get_c3d_param
@@ -16,18 +17,22 @@ from movedb.utils.ezc3d_helpers import get_c3d_param
 from .events import Event
 from .force_platforms import EZForcePlatform
 from .time_series import Analogs, Points
+
 # from sqlmodel import SQLModel, Field, Relationship, SQLModel, JSON, Column
 
 # Define a TypeVar that is bound by the Trial class itself
 _T = TypeVar("_T", bound="Trial")
 
+
 class TrialBase(BaseModel):
     """Base trial class that can be extended by database models."""
+
     name: str
     session_name: str = ""
     subject_names: list[str] | str = ""
     classification: str = ""
-    
+
+
 class Trial(TrialBase):
 
     # Trial Metadata
@@ -174,9 +179,13 @@ class Trial(TrialBase):
         session_name: str = "",
         classification: str = "",
     ) -> _T:
-        
-        subject_names = get_c3d_param(c3d_object, "SUBJECTS", "NAMES", 
-                                      default=cls.model_fields["subject_names"].default)
+
+        subject_names = get_c3d_param(
+            c3d_object,
+            "SUBJECTS",
+            "NAMES",
+            default=cls.model_fields["subject_names"].default,
+        )
         parameters = {}
         if "PROCESSING" in c3d_object.parameters:
             for key, value in c3d_object.parameters["PROCESSING"].items():
@@ -185,7 +194,7 @@ class Trial(TrialBase):
                     parameters[key] = value[0] if len(value) == 1 else value
                 else:
                     parameters[key] = value
-                    
+
         return cls(
             name=trial_name,
             session_name=session_name,
@@ -197,23 +206,27 @@ class Trial(TrialBase):
                 EZForcePlatform.from_c3d(c3d_object, index=i)
                 for i in range(len(c3d_object.data["platform"]))
             ],
-            parameters=parameters
+            parameters=parameters,
         )
-        
+
     @classmethod
     def from_c3d_file(
-        cls: Type[_T], 
-        file_path: str, 
-        trial_name: str = "", 
-        session_name: str = "", 
-        classification: str = ""
+        cls: Type[_T],
+        file_path: str,
+        trial_name: str = "",
+        session_name: str = "",
+        classification: str = "",
     ) -> _T:
         """
         Create a Trial instance from a C3D file.
         """
         c3d = ezc3d.c3d(file_path)
-        return cls.from_c3d(c3d, trial_name=trial_name, session_name=session_name, classification=classification)
-
+        return cls.from_c3d(
+            c3d,
+            trial_name=trial_name,
+            session_name=session_name,
+            classification=classification,
+        )
 
     def to_pkl(self, path: str):
         """
@@ -260,6 +273,7 @@ class Trial(TrialBase):
             filepath (str): Path to save the .mat file.
         """
         import scipy.io as sio
+
         mat_dict = {}
         mat_dict["Info"] = {
             "TrialName": self.name,
@@ -269,7 +283,7 @@ class Trial(TrialBase):
             "CameraRate": self.points.rate,
             "SubjectParameters": self.parameters,
         }
-        
+
         mat_dict["Events"] = {
             "TotalFrames": self.points.last_frame + 1 - self.points.first_frame,
             "RegionOfInterest": [
@@ -277,27 +291,32 @@ class Trial(TrialBase):
                 self.points.last_frame,
             ],
             "LeftFootStrike": [
-                event.get_frame(self.points.rate) for event in self.get_events(label="Foot Strike", context="Left")
+                event.get_frame(self.points.rate)
+                for event in self.get_events(label="Foot Strike", context="Left")
             ],
             "RightFootStrike": [
-                event.get_frame(self.points.rate) for event in self.get_events(label="Foot Strike", context="Right")
+                event.get_frame(self.points.rate)
+                for event in self.get_events(label="Foot Strike", context="Right")
             ],
             "LeftFootOff": [
-                event.get_frame(self.points.rate) for event in self.get_events(label="Foot Off", context="Left")
+                event.get_frame(self.points.rate)
+                for event in self.get_events(label="Foot Off", context="Left")
             ],
             "RightFootOff": [
-                event.get_frame(self.points.rate) for event in self.get_events(label="Foot Off", context="Right")
+                event.get_frame(self.points.rate)
+                for event in self.get_events(label="Foot Off", context="Right")
             ],
             "General": [
-                event.get_frame(self.points.rate) for event in self.get_events(context="General")
-            ]
+                event.get_frame(self.points.rate)
+                for event in self.get_events(context="General")
+            ],
         }
-        
+
         mat_dict["Markers"] = self.points.to_dict(include_residual=False)
-        
+
         # Convert analog keys to replace '.' with '_'
         analog_dict = self.analogs.to_df().to_dict()
-        analog_dict = {k.replace('.', '_'): v for k, v in analog_dict.items()}
+        analog_dict = {k.replace(".", "_"): v for k, v in analog_dict.items()}
         mat_dict["Analog"] = analog_dict
         mat_dict["Analog"]["Time"] = self.analogs.time.tolist()
 
@@ -318,7 +337,7 @@ class Trial(TrialBase):
             output_units=output_units,
             rotation=rotation,
         )
-        self.link_file("trc", filepath)        
+        self.link_file("trc", filepath)
 
     # TODO: figure out how to decouple from Trial class
     def export_force_platforms(
