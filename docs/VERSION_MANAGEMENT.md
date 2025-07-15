@@ -200,3 +200,29 @@ The script automatically updates:
 3. **`conda-recipe/meta.yaml`** - `{% set version = "x.y.z" %}`
 
 This ensures all package metadata stays in sync across build systems.
+
+## Dependency Management
+
+When updating dependencies, ensure consistency across all configuration files:
+
+### Core Dependencies
+
+Update in these locations:
+- **`pyproject.toml`** - Main package dependencies
+- **`environment.yml`** - Development environment
+- **`environment-opensim.yml`** - OpenSim-specific environment  
+- **`conda-recipe/meta.yaml`** - Conda package dependencies
+
+### Documentation Dependencies
+
+When adding/removing dependencies, also update:
+- **`README.md`** - Requirements section
+- **`docs/INSTALL.md`** - Installation instructions
+- **`docs/DEVELOPMENT.md`** - Development setup
+- **`CHANGELOG.md`** - Document the changes
+
+### Version Pinning Strategy
+
+- **Minimum versions**: Use `>=` for compatibility
+- **Major version limits**: Use `<next_major` for breaking changes
+- **Conda vs PyPI**: Some packages (like `opensim`) are conda-only

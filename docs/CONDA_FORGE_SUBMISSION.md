@@ -45,7 +45,7 @@ Your package should be in a reasonably stable state:
 
 All dependencies must be available on conda-forge or other conda channels:
 
-- ✅ `python`, `numpy`, `polars`, `pydantic`, `loguru` - Available on conda-forge
+- ✅ `python`, `numpy`, `polars`, `pydantic` - Available on conda-forge
 - ✅ `ezc3d` - Available on conda-forge
 - ✅ `opensim` - Available on opensim-org channel (acceptable)
 
@@ -116,7 +116,6 @@ requirements:
     - numpy >=1.20.0
     - polars >=0.20.0
     - pydantic >=2.0.0
-    - loguru >=0.6.0
     - ezc3d >=1.5.0
     - opensim  # Note: conda-forge uses 'opensim' not 'opensim-org::opensim'
 

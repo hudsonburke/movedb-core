@@ -23,12 +23,12 @@ update-env:  ## Update conda environment
 	conda env update -f environment.yml
 
 check-dev-deps:  ## Check if development dependencies are installed
-	@python -c "import black, flake8, mypy, isort" 2>/dev/null || { echo "❌ Development dependencies missing. Run: make install-dev"; exit 1; }
+	@python3 -c "import black, flake8, mypy, isort, numpy, polars, pydantic, ezc3d, numpydantic, pandera" 2>/dev/null || { echo "❌ Development dependencies missing. Run: make install-dev"; exit 1; }
 	@echo "✅ Development dependencies are installed"
 
 ##@ Testing
 test:  ## Run all tests with coverage
-	python scripts/run_tests.py
+	python3 scripts/run_tests.py
 
 test-quick:  ## Run tests without coverage (faster)
 	pytest --no-cov
@@ -40,10 +40,10 @@ test-coverage:  ## Run tests with coverage and HTML report
 	pytest --cov=src/movedb --cov-report=html --cov-report=term-missing
 
 test-specific:  ## Run specific test file (usage: make test-specific FILE=test_basic.py)
-	python scripts/run_tests.py --file $(FILE)
+	python3 scripts/run_tests.py --file $(FILE)
 
 test-pattern:  ## Run tests matching pattern (usage: make test-pattern PATTERN=trial)
-	python scripts/run_tests.py --pattern $(PATTERN)
+	python3 scripts/run_tests.py --pattern $(PATTERN)
 
 test-parallel:  ## Run tests in parallel (requires pytest-xdist)
 	pytest -n auto
@@ -126,7 +126,7 @@ build:  ## Build conda package
 	./scripts/build_conda.sh
 
 build-wheel:  ## Build Python wheel
-	python -m build
+	python3 -m build
 
 build-all:  ## Build both conda and wheel packages
 	$(MAKE) build
@@ -155,32 +155,32 @@ setup-anaconda:  ## Set up Anaconda.org integration (GitHub secrets)
 	./scripts/setup_anaconda_integration.sh
 
 prepare-conda-forge:  ## Prepare package for conda-forge submission
-	python scripts/prepare_conda_forge.py
+	python3 scripts/prepare_conda_forge.py
 
 check-v1-readiness:  ## Check readiness for v1.0.0 release
-	python scripts/check_v1_readiness.py
+	python3 scripts/check_v1_readiness.py
 
 ##@ Version Management
 bump-patch:  ## Bump patch version (x.y.z -> x.y.z+1)
-	python scripts/bump_version.py patch
+	python3 scripts/bump_version.py patch
 
 bump-minor:  ## Bump minor version (x.y.z -> x.y+1.0)
-	python scripts/bump_version.py minor
+	python3 scripts/bump_version.py minor
 
 bump-major:  ## Bump major version (x.y.z -> x+1.0.0)
-	python scripts/bump_version.py major
+	python3 scripts/bump_version.py major
 
 bump-version:  ## Bump to specific version (usage: make bump-version VERSION=1.2.3)
-	python scripts/bump_version.py $(VERSION)
+	python3 scripts/bump_version.py $(VERSION)
 
 release-patch:  ## Bump patch version, tag, and push
-	python scripts/bump_version.py patch --tag --push
+	python3 scripts/bump_version.py patch --tag --push
 
 release-minor:  ## Bump minor version, tag, and push
-	python scripts/bump_version.py minor --tag --push
+	python3 scripts/bump_version.py minor --tag --push
 
 release-major:  ## Bump major version, tag, and push
-	python scripts/bump_version.py major --tag --push
+	python3 scripts/bump_version.py major --tag --push
 
 ##@ Documentation
 docs:  ## Generate documentation

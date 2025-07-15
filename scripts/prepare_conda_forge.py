@@ -134,7 +134,6 @@ requirements:
     - numpy >=1.20.0
     - polars >=0.20.0
     - pydantic >=2.0.0
-    - loguru >=0.6.0
     - ezc3d >=1.5.0
     - opensim
 

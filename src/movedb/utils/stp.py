@@ -1,8 +1,7 @@
 import numpy as np
-from loguru import logger
 
 from ..core import Trial
-
+import warnings
 # NOT YET IMPLEMENTED -- Maybe should be part of Trial class?
 
 
@@ -14,11 +13,11 @@ def stride_time(trial: Trial) -> dict[str, list[float]]:
     for side in ["Left", "Right"]:
         foot_strike = trial.get_events(label="Foot Strike", context=side)
         if not foot_strike:
-            logger.warning(f"No foot strike events found for {side} side")
+            warnings.warn(f"No foot strike events found for {side} side")
             continue
         foot_strike_times = [event.get_time(trial.points.rate) for event in foot_strike]
         if len(foot_strike_times) < 2:
-            logger.warning(
+            warnings.warn(
                 f"Not enough foot strike events for {side} side to calculate stride time"
             )
             continue
@@ -35,17 +34,17 @@ def stride_length(trial: Trial) -> dict[str, list[float]]:
     for side in ["Left", "Right"]:
         foot_marker = side[0].upper() + "TOE"
         if foot_marker not in trial.points.trajectories:
-            logger.warning(f"Marker {foot_marker} not found in trial points")
+            warnings.warn(f"Marker {foot_marker} not found in trial points")
             continue
         foot_strike = trial.get_events(label="Foot Strike", context=side)
         if not foot_strike:
-            logger.warning(f"No foot strike events found for {side} side")
+            warnings.warn(f"No foot strike events found for {side} side")
             continue
         foot_strike_frames = [
             event.get_frame(trial.points.rate) for event in foot_strike
         ]
         if len(foot_strike_frames) < 2:
-            logger.warning(
+            warnings.warn(
                 f"Not enough foot strike events for {side} side to calculate stride length"
             )
             continue
@@ -55,7 +54,7 @@ def stride_length(trial: Trial) -> dict[str, list[float]]:
             start_pos = trial.points.get_marker_coords(foot_marker, start_frame)
             end_pos = trial.points.get_marker_coords(foot_marker, end_frame)
             if start_pos is None or end_pos is None:
-                logger.warning(
+                warnings.warn(
                     f"Missing marker position for {foot_marker} at frames {start_frame} or {end_frame}"
                 )
                 continue
@@ -78,7 +77,7 @@ def stride_velocity(trial: Trial) -> dict[str, list[float]]:
         times = stride_times.get(side, [])
 
         if not lengths or not times:
-            logger.warning(
+            warnings.warn(
                 f"Not enough data to calculate stride velocity for {side} side"
             )
             continue
@@ -88,7 +87,7 @@ def stride_velocity(trial: Trial) -> dict[str, list[float]]:
         # and that the i-th length corresponds to the i-th time.
         for i in range(min(len(lengths), len(times))):
             if times[i] == 0:  # Avoid division by zero
-                logger.warning(
+                warnings.warn(
                     f"Stride time is zero for {side} side, cannot calculate velocity for stride {i}"
                 )
                 velocities[side].append(float("nan"))  # Or handle as appropriate
@@ -96,7 +95,7 @@ def stride_velocity(trial: Trial) -> dict[str, list[float]]:
                 velocities[side].append(lengths[i] / times[i])
 
         if len(lengths) != len(times):
-            logger.warning(
+            warnings.warn(
                 f"Mismatch in number of stride lengths and times for {side} side. "
                 f"Velocity calculated for {min(len(lengths), len(times))} strides."
             )
@@ -160,10 +159,10 @@ def stance_time(trial) -> dict[str, list[float]]:
         foot_strike = trial.get_events(label="Foot Strike", context=side)
         foot_off = trial.get_events(label="Foot Off", context=side)
         if not foot_strike:
-            logger.warning(f"No foot strike events found for {side} side")
+            warnings.warn(f"No foot strike events found for {side} side")
             continue
         if not foot_off:
-            logger.warning(f"No foot off events found for {side} side")
+            warnings.warn(f"No foot off events found for {side} side")
             continue
         # TODO: Implement stance time calculation
         foot_strike_times = [event.get_time(trial.points.rate) for event in foot_strike]
@@ -187,13 +186,13 @@ def stance_percentage(trial) -> dict[str, list[float]]:
         stance = stance_times.get(side, [])
         stride = stride_times.get(side, [])
         if not stance or not stride:
-            logger.warning(
+            warnings.warn(
                 f"Not enough data to calculate stance percentage for {side} side"
             )
             continue
         for i in range(min(len(stance), len(stride))):
             if stride[i] == 0:
-                logger.warning(
+                warnings.warn(
                     f"Stride time is zero for {side} side, cannot calculate stance percentage for stride {i}"
                 )
                 percentages[side].append(float("nan"))

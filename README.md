@@ -15,7 +15,7 @@ Core library for movement database operations, including C3D file I/O and OpenSi
 - **OpenSim Integration**: Export data to OpenSim formats (TRC, MOT, XML)
 - **Time Series Processing**: Handle marker trajectories and analog data
 - **Force Platform Support**: Process force platform data from C3D files
-- **Data Validation**: Built-in data validation and gap detection
+- **Data Validation**: Built-in data validation with numpydantic and pandera-polars
 - **Type Safety**: Full type hints and Pydantic models for data integrity
 
 ## Installation
@@ -112,6 +112,8 @@ For detailed installation instructions, see [docs/INSTALL.md](docs/INSTALL.md).
 - Testing and code quality guidelines  
 - CI/CD and packaging workflows
 - Version 1.0.0 roadmap
+
+📝 **[CHANGELOG.md](CHANGELOG.md)** - Track all changes and updates to the project
 
 ## Quick Start
 
@@ -227,7 +229,8 @@ See [`docs/README.md`](docs/README.md) for a complete documentation index, inclu
 - numpy >= 1.20.0
 - polars >= 0.20.0
 - pydantic >= 2.0.0
-- loguru >= 0.6.0
+- numpydantic >= 1.0.0 *(for data validation)*
+- pandera-polars >= 0.20.0 *(for data validation)*
 - ezc3d >= 1.5.0
 
 ### Optional Dependencies
@@ -253,7 +256,7 @@ pip install -e ".[dev]"
 # Alternative: Manual setup
 conda create -n movedb-dev python=3.11
 conda activate movedb-dev
-conda install -c conda-forge numpy polars pydantic loguru ezc3d
+conda install -c conda-forge numpy polars pydantic ezc3d numpydantic pandera-polars
 pip install -e ".[dev]"
 ```
 

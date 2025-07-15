@@ -38,6 +38,7 @@ def main():
     
     tests = [
         ("make help", "Testing Makefile help system"),
+        ("python -c 'import numpy, polars, pydantic, ezc3d, numpydantic, pandera; print(\"✅ Core dependencies available\")'", "Testing core dependencies"),
         ("python run_tests.py --help || echo 'Run tests script exists'", "Testing Python test runner"),
         ("make test-quick", "Testing quick test run"),
         ("make test-pattern PATTERN=imports", "Testing pattern-based test selection"),

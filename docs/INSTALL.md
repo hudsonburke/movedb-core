@@ -90,7 +90,7 @@ conda create -n movedb-env python=3.11
 conda activate movedb-env
 
 # Install dependencies
-conda install -c conda-forge numpy polars pydantic loguru ezc3d
+conda install -c conda-forge numpy polars pydantic ezc3d numpydantic pandera-polars
 conda install -c opensim-org opensim
 
 # Install movedb-core

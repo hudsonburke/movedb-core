@@ -16,7 +16,7 @@ conda activate movedb-core-dev
 # OR use any conda environment with the required dependencies
 conda create -n my-movedb-env python=3.11
 conda activate my-movedb-env
-conda install -c conda-forge -c opensim-org pytest pytest-cov black flake8 mypy numpy polars pydantic loguru ezc3d
+conda install -c conda-forge -c opensim-org pytest pytest-cov black flake8 mypy numpy polars pydantic ezc3d numpydantic pandera-polars
 ```
 
 ### 2. Install Package in Development Mode

@@ -2,9 +2,9 @@
 
 import os
 from typing import TYPE_CHECKING
+import warnings
 
 import numpy as np
-from loguru import logger
 
 if TYPE_CHECKING:
     import opensim as osim
@@ -18,8 +18,10 @@ else:
     except ImportError:
         OPENSIM_AVAILABLE = False
         osim = None  # type: ignore
-        logger.warning(
-            "OpenSim not available. OpenSim export features will be disabled."
+        warnings.warn(
+            "OpenSim not available. OpenSim export features will be disabled.",
+            UserWarning,
+            stacklevel=2
         )
 
 
@@ -63,7 +65,7 @@ def export_trc(
     table.setColumnLabels(marker_names)
     conversion_factor = 1.0
     if output_units is not None and units != output_units:
-        logger.info(
+        warnings.warn(
             f"Output units {output_units} do not match points units {units}. Converting coordinates."
         )
         conversion_factor = get_units_conversion_factor(units, output_units)

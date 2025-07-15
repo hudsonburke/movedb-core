@@ -14,6 +14,7 @@ This directory contains comprehensive documentation for movedb-core.
 - **[ROADMAP_V1.md](ROADMAP_V1.md)** - Version 1.0.0 roadmap and timeline
 - **[LINTING.md](LINTING.md)** - Code quality and linting guide
 - **[VERSION_MANAGEMENT.md](VERSION_MANAGEMENT.md)** - Version bumping and release process
+- **[../CHANGELOG.md](../CHANGELOG.md)** - Project changelog and version history
 
 ### 🚚 Packaging & Distribution
 
