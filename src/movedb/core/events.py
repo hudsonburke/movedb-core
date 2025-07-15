@@ -1,28 +1,55 @@
 """Event data structures for biomechanical trials."""
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, Field
+import ezc3d
+from movedb.utils import get_c3d_param
 
 
 class Event(BaseModel):
     """
     Times will default to being stored in seconds.
     See c3d event specification for details.
+    
+    Exactly one of 'frame' or 'time' must be provided.
     """
 
     label: str
     context: str
-    frame: int | None = None
-    time: float | None = None
+    frame: int | None = Field(default=None, description="Frame number")
+    time: float | None = Field(default=None, description="Time in seconds")
     description: str | None = None
+    
+    @classmethod
+    def from_c3d(cls, c3d_obj: ezc3d.c3d, index: int = 0) -> "Event":
+        if not "EVENT" in c3d_obj.parameters:
+            raise ValueError("C3D object does not contain EVENT parameters.")
+        label = get_c3d_param(c3d_obj, "EVENT", "LABELS", index=index, default="")
+        context = get_c3d_param(c3d_obj, "EVENT", "CONTEXTS", index=index, default="")
+        # Get time in seconds from (min, sec) format
+        time_min, time_sec = get_c3d_param(c3d_obj, "EVENT", "TIMES", index=index, default=[[None, None]])
+        if time_min is None or time_sec is None:
+            raise ValueError(f"Invalid time data for event at index {index} in C3D object")
+        description = get_c3d_param(c3d_obj, "EVENT", "DESCRIPTIONS", index=index, default="")
+        return cls(
+            label=label,
+            context=context,
+            time= time_min[0] * 60 + time_sec[0],  # Convert from (min, sec) to sec
+            description=description,
+        )
 
     @model_validator(mode="after")
-    def validate_frames_or_times(self):
-        assert (
-            self.frame is not None or self.time is not None
-        ), "Either frames or times must be provided."
-        assert (
-            self.frame is None or self.time is None
-        ), "Only one of frames or times should be provided."
+    def validate_exactly_one_temporal_field(self):
+        """Ensure exactly one of frame or time is provided."""
+        fields_provided = sum([
+            self.frame is not None,
+            self.time is not None
+        ])
+        
+        if fields_provided == 0:
+            raise ValueError("Exactly one of 'frame' or 'time' must be provided")
+        elif fields_provided > 1:
+            raise ValueError("Only one of 'frame' or 'time' may be provided, not both")
+            
         return self
 
     def get_frame(self, point_rate: float | None) -> int:

@@ -124,6 +124,7 @@ dmypy.json
 Thumbs.db
 
 # IDE
+*.code-workspace
 .vscode/
 .idea/
 *.swp

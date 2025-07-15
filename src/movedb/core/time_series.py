@@ -1,9 +1,15 @@
 """Time series data structures for biomechanical trials."""
-
+import ezc3d
+from movedb.utils import get_c3d_param
 import numpy as np
+from typing import Annotated
 import polars as pl
-from pydantic import BaseModel, field_validator, model_validator
+import pandera.polars as pa
+from pandera.typing.polars import DataFrame
+from pydantic import BaseModel, model_validator, AfterValidator
+import warnings
 
+# TODO: Consolidate data from Analogs and Points so that can share common functionality
 
 class TimeSeriesGroup(BaseModel):
     first_frame: int
@@ -38,6 +44,11 @@ class TimeSeriesGroup(BaseModel):
         """
         return np.arange(self.first_frame - 1, self.last_frame - 1) / self.rate
 
+class MarkerSchema(pa.DataFrameModel):
+    x: float
+    y: float
+    z: float
+    residual: float
 
 class MarkerTrajectory(BaseModel):
     """
@@ -45,51 +56,29 @@ class MarkerTrajectory(BaseModel):
     x, y, z, residual, description
     """
 
-    class Config:
-        arbitrary_types_allowed = True
-
-    data: pl.DataFrame
+    data: Annotated[
+        DataFrame[MarkerSchema],
+        AfterValidator(MarkerSchema.validate)
+    ]
     description: str = ""
 
-    def __init__(self, **kwargs):
-        if "data" in kwargs:
-            data = kwargs["data"]
-        else:
-            data = pl.DataFrame(
-                {
-                    "x": kwargs.get("x", []),
-                    "y": kwargs.get("y", []),
-                    "z": kwargs.get("z", []),
-                    "residual": kwargs.get("residual", []),
-                }
-            )
-        description = kwargs.get("description", "")
-        super().__init__(data=data, description=description)
-
-    @field_validator("data")
     @classmethod
-    def validate_dataframe_structure(cls, v: pl.DataFrame) -> pl.DataFrame:
-        """Validate that the DataFrame has the required columns"""
-        required_columns = ["x", "y", "z", "residual"]
+    def from_c3d(cls, c3d_object: ezc3d.c3d, index: int = 0) -> "MarkerTrajectory":
+        """ 
+        Create a MarkerTrajectory from a C3D object.
+        """
+        description = get_c3d_param(c3d_object, "POINT", "DESCRIPTIONS", index=index, default=cls.model_fields['description'].default)
 
-        missing = [col for col in required_columns if col not in v.columns]
-        if missing:
-            raise ValueError(f"Missing required columns: {missing}")
-
-        # Ensure correct data types
-        try:
-            v = v.with_columns(
-                [
-                    pl.col("x").cast(pl.Float64),
-                    pl.col("y").cast(pl.Float64),
-                    pl.col("z").cast(pl.Float64),
-                    pl.col("residual").cast(pl.Float64),
-                ]
-            )
-        except Exception as e:
-            raise ValueError(f"Error casting columns to correct types: {e}")
-        return v
-
+        return cls(
+            data=DataFrame[MarkerSchema]({
+                "x": c3d_object.data["points"][0, index, :].tolist(),
+                "y": c3d_object.data["points"][1, index, :].tolist(),
+                "z": c3d_object.data["points"][2, index, :].tolist(),
+                "residual": c3d_object.data["meta_points"]["residuals"][0, index, :].tolist(),
+            }), 
+            description=description
+        )
+        
     @property
     def coords(self) -> np.ndarray:
         """Return coordinates as numpy array (n_frames, 3)"""
@@ -103,21 +92,45 @@ class MarkerTrajectory(BaseModel):
     def __len__(self) -> int:
         return len(self.data)
 
-    def prefix_columns(self, prefix: str) -> pl.DataFrame:
-        """Rename columns with a prefix for concatenation"""
-        return self.data.rename(
-            {
-                "x": f"{prefix}_x",
-                "y": f"{prefix}_y",
-                "z": f"{prefix}_z",
-                "residual": f"{prefix}_residual",
-            }
-        )
-
 
 class Points(TimeSeriesGroup):
-    units: str
+    units: str = "m"
     trajectories: dict[str, MarkerTrajectory]
+    
+    @classmethod
+    def from_c3d(cls, c3d_object: ezc3d.c3d) -> "Points":
+        if not "POINT" in c3d_object.parameters:
+            raise ValueError("C3D object does not contain POINT parameters.")
+        if not "points" in c3d_object.data:
+            raise ValueError("C3D object does not contain point data.")
+        header_first_frame = c3d_object.header["points"]["first_frame"]
+        header_last_frame = c3d_object.header["points"]["last_frame"]
+        header_rate = c3d_object.header["points"]["frame_rate"]
+        
+        camera_rate = get_c3d_param(c3d_object, "TRIAL", "CAMERA_RATE", default=header_rate)
+        point_rate = get_c3d_param(c3d_object, "POINT", "RATE", default=camera_rate)
+        if camera_rate != header_rate:
+            warnings.warn(
+                f"Camera rate {camera_rate} does not match header rate {header_rate}. Defaulting to camera rate."
+            )
+        if point_rate != camera_rate:
+            warnings.warn(
+                f"Point rate {point_rate} does not match camera rate {camera_rate}. Defaulting to point rate."
+            )
+        
+        labels = get_c3d_param(c3d_object, "POINT", "LABELS", default=[])
+        units = get_c3d_param(c3d_object, "POINT", "UNITS", default=[cls.model_fields["units"].default])[0]
+
+        return cls(
+           first_frame=header_first_frame,
+           last_frame=header_last_frame,
+           rate=point_rate,
+           units=units,
+           trajectories={
+                label: MarkerTrajectory.from_c3d(c3d_object, index=i)
+                for i, label in enumerate(labels)
+            }
+        )
 
     @model_validator(mode="after")
     def validate_trajectory_lengths(self) -> "Points":
@@ -144,7 +157,14 @@ class Points(TimeSeriesGroup):
         dfs = []
         for name, trajectory in self.trajectories.items():
             prefix = name
-            traj_df = trajectory.prefix_columns(prefix)
+            traj_df = trajectory.data.rename(
+                {
+                    "x": f"{prefix}_x",
+                    "y": f"{prefix}_y",
+                    "z": f"{prefix}_z",
+                    "residual": f"{prefix}_residual",
+                }
+            )
             if not include_residual:
                 traj_df = traj_df.drop(f"{prefix}_residual")
             dfs.append(traj_df)
@@ -203,7 +223,7 @@ class Points(TimeSeriesGroup):
             residual = [0.0] * n_frames
 
         trajectory = MarkerTrajectory(
-            data=pl.DataFrame({"x": x, "y": y, "z": z, "residual": residual}),
+            data=DataFrame[MarkerSchema]({"x": x, "y": y, "z": z, "residual": residual}),
             description=description,
         )
         self.trajectories[name] = trajectory
@@ -211,18 +231,80 @@ class Points(TimeSeriesGroup):
 
 class AnalogChannel(BaseModel):
     """Each analog channel can have different units"""
-
-    data: list[float]
+    data: list[float] #TODO: Should this be a sequence type like np.ndarray?
     units: str = 'V'
     scale: float = 1.0
     offset: float = 0.0
     description: str = ""
+    
+    @classmethod
+    def from_c3d(cls, c3d_obj: ezc3d.c3d, index: int = 0) -> "AnalogChannel":
+        analog_data = c3d_obj.data["analogs"][0, index, :].tolist()
+        units = get_c3d_param(c3d_obj, "ANALOG", "UNITS", index=index, default=cls.model_fields['units'].default)
+        scale = get_c3d_param(c3d_obj, "ANALOG", "SCALE", index=index, default=cls.model_fields['scale'].default)
+        offset = get_c3d_param(c3d_obj, "ANALOG", "OFFSET", index=index, default=cls.model_fields['offset'].default)
+        description = get_c3d_param(c3d_obj, "ANALOG", "DESCRIPTIONS", index=index, default=cls.model_fields['description'].default)
+        
+        return cls(
+            data=analog_data,
+            units=units,
+            scale=scale,
+            offset=offset,
+            description=description
+        )
 
+    def __len__(self) -> int:
+        return len(self.data)
 
 class Analogs(TimeSeriesGroup):
     # Analogs store different channels each of which could have different units
     channels: dict[str, AnalogChannel]
     gen_scale: float = 1.0  # General scale factor for all channels
+
+    @classmethod
+    def from_c3d(cls, c3d_object: ezc3d.c3d) -> "Analogs":
+        if not "ANALOG" in c3d_object.parameters:
+            raise ValueError("C3D object does not contain ANALOG parameters.")
+        if not "analogs" in c3d_object.data:
+            raise ValueError("C3D object does not contain analog data.")
+        
+        header_first_frame = c3d_object.header["analogs"]["first_frame"]
+        header_last_frame = c3d_object.header["analogs"]["last_frame"]
+        header_rate = c3d_object.header["analogs"]["frame_rate"]
+        
+        analog_rate = get_c3d_param(c3d_object, "ANALOG", "RATE", default=header_rate)
+        if analog_rate != header_rate:
+            warnings.warn(
+                f"Analog rate {analog_rate} does not match header rate {header_rate}. Defaulting to analog rate."
+            )
+
+        labels = get_c3d_param(c3d_object, "ANALOG", "LABELS", default=[])
+               
+        gen_scale = get_c3d_param(c3d_object, "ANALOG", "GEN_SCALE", default=[1.0])[0]
+
+        return cls(
+            first_frame=header_first_frame, # TODO: Maybe ignore header and set this based on data?
+            last_frame=header_last_frame,
+            rate=analog_rate,
+            gen_scale=gen_scale,
+            channels={
+                label: AnalogChannel.from_c3d(c3d_object, index=i)
+                for i, label in enumerate(labels)
+            },
+        )
+            
+    @model_validator(mode="after")
+    def validate_channel_lengths(self) -> "Analogs":
+        """Ensure all channels have the same length matching total_frames"""
+        expected_length = self.total_frames
+
+        for channel_name, channel in self.channels.items():
+            if len(channel) != expected_length:
+                raise ValueError(
+                    f"Channel '{channel_name}' has {len(channel)} frames, "
+                    f"expected {expected_length} frames"
+                )
+        return self
 
     def to_df(self) -> pl.DataFrame:
         """

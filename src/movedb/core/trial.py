@@ -1,36 +1,39 @@
 """
 Refactored Trial class with improved separation of concerns.
 """
-
+import ezc3d
 import os
 import pickle
 from typing import Any, Type, TypeVar
 
 import numpy as np
 import polars as pl
-from loguru import logger
+import warnings
 from pydantic import BaseModel, model_validator
 
+from movedb.utils.ezc3d_helpers import get_c3d_param
+
 from .events import Event
-from .force_platforms import EZC3DForcePlatform
+from .force_platforms import EZForcePlatform
 from .time_series import Analogs, Points
 # from sqlmodel import SQLModel, Field, Relationship, SQLModel, JSON, Column
 
 # Define a TypeVar that is bound by the Trial class itself
 _T = TypeVar("_T", bound="Trial")
 
-# class TrialBase(SQLModel):
-#     name: str
-#     session_name: str | None = None
-#     subject_names: list[str] | str | None = Field(sa_column=Column(JSON))
-#     classification: str = ""
+class TrialBase(BaseModel):
+    """Base trial class that can be extended by database models."""
+    name: str
+    session_name: str = ""
+    subject_names: list[str] | str = ""
+    classification: str = ""
     
-class Trial(BaseModel):
+class Trial(TrialBase):
 
     # Trial Metadata
     name: str
-    session_name: str | None = None
-    subject_names: list[str] | str | None = None
+    session_name: str = ""
+    subject_names: list[str] | str = ""
     classification: str = ""
     linked_files: dict[str, str] = (
         {}
@@ -43,7 +46,7 @@ class Trial(BaseModel):
     point_gaps: dict[str, list[tuple[int, int]]] = {}
 
     analogs: Analogs
-    force_platforms: list[EZC3DForcePlatform] = []  # List of force platforms, if any
+    force_platforms: list[EZForcePlatform] = []  # List of force platforms, if any
 
     def get_events(self, label: str = "", context: str = "") -> list[Event]:
         """
@@ -166,30 +169,51 @@ class Trial(BaseModel):
     @classmethod
     def from_c3d(
         cls: Type[_T],
-        c3d_object,
+        c3d_object: ezc3d.c3d,
         trial_name: str = "",
         session_name: str = "",
         classification: str = "",
     ) -> _T:
-        """
-        Create a Trial instance from a C3D object.
-        """
-        from ..file_io import C3DLoader
-
-        trial_data = C3DLoader.load_from_c3d_object(
-            c3d_object, trial_name, session_name, classification
+        
+        subject_names = get_c3d_param(c3d_object, "SUBJECTS", "NAMES", 
+                                      default=cls.model_fields["subject_names"].default)
+        parameters = {}
+        if "PROCESSING" in c3d_object.parameters:
+            for key, value in c3d_object.parameters["PROCESSING"].items():
+                arr = value.get("value", [])
+                if isinstance(value, list):
+                    parameters[key] = value[0] if len(value) == 1 else value
+                else:
+                    parameters[key] = value
+                    
+        return cls(
+            name=trial_name,
+            session_name=session_name,
+            classification=classification,
+            subject_names=subject_names,
+            points=Points.from_c3d(c3d_object),
+            analogs=Analogs.from_c3d(c3d_object),
+            force_platforms=[
+                EZForcePlatform.from_c3d(c3d_object, index=i)
+                for i in range(len(c3d_object.data["platform"]))
+            ],
+            parameters=parameters
         )
-        return cls(**trial_data)
-
+        
     @classmethod
-    def from_c3d_file(cls: Type[_T], file_path: str) -> _T:
+    def from_c3d_file(
+        cls: Type[_T], 
+        file_path: str, 
+        trial_name: str = "", 
+        session_name: str = "", 
+        classification: str = ""
+    ) -> _T:
         """
         Create a Trial instance from a C3D file.
         """
-        from ..file_io import C3DLoader
+        c3d = ezc3d.c3d(file_path)
+        return cls.from_c3d(c3d, trial_name=trial_name, session_name=session_name, classification=classification)
 
-        trial_data = C3DLoader.load_from_file(file_path)
-        return cls(**trial_data)
 
     def to_pkl(self, path: str):
         """
@@ -352,7 +376,7 @@ class Trial(BaseModel):
             )  # This could be precomputed, but having it next to the data makes it clear what order it should be added
             mot_labels.extend([fp_torque_identifier + coord for coord in "xyz"])
             if display_i not in applied_bodies:
-                logger.warning(
+                warnings.warn(
                     f"Force platform {display_i} does not have an applied body defined. Skipping."
                 )
                 continue
@@ -380,7 +404,7 @@ class Trial(BaseModel):
                 moment_conversion_factor,
             ) = (1.0, 1.0, 1.0)
             if fp.unit_force != unit_force:
-                logger.warning(
+                warnings.warn(
                     f"Force platform {display_i} force unit {fp.unit_force} "
                     f"does not match output unit {unit_force}. Converting forces."
                 )
@@ -388,7 +412,7 @@ class Trial(BaseModel):
                     fp.unit_force, unit_force
                 )
             if fp.unit_position != unit_position:
-                logger.warning(
+                warnings.warn(
                     f"Force platform {display_i} position unit {fp.unit_position} "
                     f"does not match output unit {unit_position}. Converting positions."
                 )
@@ -396,7 +420,7 @@ class Trial(BaseModel):
                     fp.unit_position, unit_position
                 )
             if fp.unit_moment != unit_moment:
-                logger.warning(
+                warnings.warn(
                     f"Force platform {display_i} torque unit {fp.unit_moment} "
                     f"does not match output unit {unit_moment}. Converting torques."
                 )
