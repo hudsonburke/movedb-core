@@ -8,7 +8,7 @@ A Python library for handling movement/biomechanics data including:
 - Motion capture data management
 """
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 __author__ = "Hudson Burke"
 __email__ = "hudsonburke01@gmail.com"
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "movedb-core"
-version = "0.3.2"
+version = "0.3.3"
 description = "Core library for movement database operations, including C3D file I/O and OpenSim integration"
 readme = "README.md"
 license = {text = "MIT"}
@@ -133,7 +133,7 @@ markers = [
     "file_io: marks tests that require file I/O",
     "opensim: marks tests that require OpenSim",
 ]
-minversion = "0.3.2"
+minversion = "0.3.3"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
@@ -170,7 +170,7 @@ exclude_lines = [
 directory = "htmlcov"
 
 [tool.mypy]
-python_version = "0.3.2"
+python_version = "0.3.3"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
