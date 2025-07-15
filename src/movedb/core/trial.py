@@ -190,10 +190,10 @@ class Trial(TrialBase):
         if "PROCESSING" in c3d_object.parameters:
             for key, value in c3d_object.parameters["PROCESSING"].items():
                 arr = value.get("value", [])
-                if isinstance(value, list):
-                    parameters[key] = value[0] if len(value) == 1 else value
+                if isinstance(arr, list) or isinstance(arr, np.ndarray):
+                    parameters[key] = arr[0] if len(arr) == 1 else arr
                 else:
-                    parameters[key] = value
+                    parameters[key] = arr
 
         return cls(
             name=trial_name,
@@ -220,7 +220,7 @@ class Trial(TrialBase):
         """
         Create a Trial instance from a C3D file.
         """
-        c3d = ezc3d.c3d(file_path)
+        c3d = ezc3d.c3d(file_path, extract_forceplat_data=True)
         return cls.from_c3d(
             c3d,
             trial_name=trial_name,

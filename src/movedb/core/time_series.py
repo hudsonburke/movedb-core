@@ -46,7 +46,7 @@ class TimeSeriesGroup(BaseModel):
         """
         Return a time vector for the time series group.
         """
-        return np.arange(self.first_frame - 1, self.last_frame - 1) / self.rate
+        return np.arange(self.first_frame - 1, self.last_frame) / self.rate
 
 
 class MarkerSchema(pa.DataFrameModel):
