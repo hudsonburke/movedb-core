@@ -46,14 +46,19 @@ class TimeSeriesGroup(BaseModel):
         """
         Return a time vector for the time series group.
         """
-        return np.arange(self.first_frame - 1, self.last_frame) / self.rate
+        if self.first_frame > 0:
+            frame = self.first_frame - 1
+        else:
+            frame = 0
+        return np.arange(frame, self.last_frame + 1) / self.rate
 
 
 class MarkerSchema(pa.DataFrameModel):
-    x: float
-    y: float
-    z: float
-    residual: float
+    x: float = pa.Field(coerce=True, nullable=True)
+    y: float = pa.Field(coerce=True, nullable=True)
+    z: float = pa.Field(coerce=True, nullable=True)
+    residual: float = pa.Field(coerce=True, nullable=True)
+ValidMarkerData = Annotated[DataFrame[MarkerSchema], AfterValidator(MarkerSchema.validate)]
 
 
 class MarkerTrajectory(BaseModel):
@@ -62,7 +67,7 @@ class MarkerTrajectory(BaseModel):
     x, y, z, residual, description
     """
 
-    data: Annotated[DataFrame[MarkerSchema], AfterValidator(MarkerSchema.validate)]
+    data: ValidMarkerData
     description: str = ""
 
     @classmethod
@@ -77,7 +82,6 @@ class MarkerTrajectory(BaseModel):
             index=index,
             default=cls.model_fields["description"].default,
         )
-
         return cls(
             data=DataFrame[MarkerSchema](
                 {

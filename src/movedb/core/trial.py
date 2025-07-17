@@ -195,6 +195,8 @@ class Trial(TrialBase):
                 else:
                     parameters[key] = arr
 
+        num_events = get_c3d_param(c3d_object, "EVENT", "USED", default=[0])[0]
+
         return cls(
             name=trial_name,
             session_name=session_name,
@@ -207,6 +209,10 @@ class Trial(TrialBase):
                 for i in range(len(c3d_object.data["platform"]))
             ],
             parameters=parameters,
+            events=[
+                Event.from_c3d(c3d_object, index=i)
+                for i in range(int(num_events))
+            ],
         )
 
     @classmethod
@@ -321,23 +327,6 @@ class Trial(TrialBase):
         mat_dict["Analog"]["Time"] = self.analogs.time.tolist()
 
         sio.savemat(filepath, mat_dict)
-
-    def to_trc(
-        self, filepath: str, output_units: str = "mm", rotation: np.ndarray = np.eye(3)
-    ):
-        """Export marker data to TRC format. Convenience method."""
-        from ..file_io import export_trc
-
-        export_trc(
-            filepath,
-            markers=self.points.to_dict(include_residual=False),
-            time=self.points.time,
-            rate=self.points.rate,
-            units=self.points.units,
-            output_units=output_units,
-            rotation=rotation,
-        )
-        self.link_file("trc", filepath)
 
     # TODO: figure out how to decouple from Trial class
     def export_force_platforms(
@@ -491,22 +480,6 @@ class Trial(TrialBase):
         ext_loads.setDataFileName(mot_filename)
         ext_loads.printToXML(external_loads_filepath)
         self.link_file("fp_setup", external_loads_filepath)
-
-    def run_opensim_ik(self, model_path: str, **kwargs):
-        """Run OpenSim Inverse Kinematics. Convenience method."""
-        from ..file_io import opensim_ik
-
-        ik_results_path, ik_setup_path = opensim_ik(self.name, model_path, **kwargs)
-        self.link_file("ik_results", ik_results_path)
-        self.link_file("ik_setup", ik_setup_path)
-
-    def run_opensim_id(self, model_path: str, **kwargs):
-        """Run OpenSim Inverse Dynamics. Convenience method."""
-        from ..file_io import opensim_id
-
-        id_results_path, id_setup_path = opensim_id(self.name, model_path, **kwargs)
-        self.link_file("id_results", id_results_path)
-        self.link_file("id_setup", id_setup_path)
 
     # TODO: These are definitely not the best implementations, but they work for now
     def get_stance_phases(

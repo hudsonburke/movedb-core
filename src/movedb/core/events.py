@@ -27,9 +27,9 @@ class Event(BaseModel):
         label = get_c3d_param(c3d_obj, "EVENT", "LABELS", index=index, default="")
         context = get_c3d_param(c3d_obj, "EVENT", "CONTEXTS", index=index, default="")
         # Get time in seconds from (min, sec) format
-        time_min, time_sec = get_c3d_param(
-            c3d_obj, "EVENT", "TIMES", index=index, default=[[None, None]]
-        )
+        time_min, time_sec=  get_c3d_param(
+            c3d_obj, "EVENT", "TIMES", default=[[None, None]]
+        )[:, index]
         if time_min is None or time_sec is None:
             raise ValueError(
                 f"Invalid time data for event at index {index} in C3D object"
@@ -40,7 +40,7 @@ class Event(BaseModel):
         return cls(
             label=label,
             context=context,
-            time=time_min[0] * 60 + time_sec[0],  # Convert from (min, sec) to sec
+            time=time_min * 60 + time_sec,  # Convert from (min, sec) to sec
             description=description,
         )
 

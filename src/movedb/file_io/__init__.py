@@ -5,6 +5,9 @@ from .opensim_exporters import (
     get_units_conversion_factor,
     opensim_id,
     opensim_ik,
+    OpenSimExternalForce,
+    export_external_loads,
+    export_mot
 )
 from .opensim_readers import parse_enf_file, sto_to_df
 
@@ -15,4 +18,5 @@ __all__ = [
     "sto_to_df",
     "parse_enf_file",
     "get_units_conversion_factor",
+    "OpenSimExternalForce"
 ]
