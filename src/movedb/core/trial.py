@@ -1,7 +1,3 @@
-"""
-Refactored Trial class with improved separation of concerns.
-"""
-
 import os
 import pickle
 import warnings
@@ -64,7 +60,7 @@ class Trial(TrialBase):
             if (not label or event.label == label)
             and (not context or event.context == context)
         ]
-
+        
     @model_validator(mode="after")
     def order_events(self) -> "Trial":
         """
@@ -76,16 +72,90 @@ class Trial(TrialBase):
         )
         return self
 
-    def link_file(self, file_key: str, file_path: str):
-        """Link a file to this trial by storing its absolute path."""
-        self.linked_files[file_key] = os.path.abspath(file_path)
-
-    def get_linked_file(self, file_key: str) -> str:
+    def get_event_sequences(self, seq: list[tuple[str, str]], repeat: bool = False, strict: bool = False) -> list[list[Event]]:
         """
-        Get the absolute path of an associated file by its key.
-        Returns an empty string if the file is not associated.
+        Get sequences of events based on a list of (label, context) tuples.
+        
+        Args:
+            seq: A list of (label, context) tuples defining the event sequence to find.
+            repeat: If True, find all occurrences of the sequence, including overlapping ones. 
+                   If False, only find the first complete occurrence.
+            strict: If True, only match sequences where events appear consecutively without interruptions.
+                   If False, allow other events between sequence elements.
+                   
+        Returns:
+            A list of event sequences, where each sequence is a list of Event objects.
+            If repeat=False, the list will contain at most one sequence.
         """
-        return self.linked_files.get(file_key, "")
+        if not seq:
+            return []
+            
+        sequences = []
+        
+        # If not in repeat mode, just find the first occurrence
+        if not repeat:
+            current_sequence = []
+            seq_index = 0
+            
+            for event in self.events:
+                if (event.label, event.context) == seq[seq_index]:
+                    current_sequence.append(event)
+                    seq_index += 1
+                    
+                    # If we've completed the sequence
+                    if seq_index >= len(seq):
+                        sequences.append(current_sequence)
+                        break
+                elif strict and seq_index > 0:
+                    # In strict mode, reset sequence if we encounter a non-matching event
+                    current_sequence = []
+                    seq_index = 0
+                    
+                    # Check if this event could start a new sequence
+                    if (event.label, event.context) == seq[0]:
+                        current_sequence.append(event)
+                        seq_index = 1
+            
+            # Warn if we didn't find a complete sequence
+            if not sequences:
+                warnings.warn(
+                    f"No complete event sequence matching {seq} was found in trial {self.name}."
+                )
+                
+            return sequences
+        
+        # In repeat mode, find all occurrences (including overlapping ones)
+        # by starting a search from each event
+        for start_idx in range(len(self.events)):
+            current_sequence = []
+            seq_index = 0
+            event_idx = start_idx
+            
+            while event_idx < len(self.events):
+                event = self.events[event_idx]
+                
+                if (event.label, event.context) == seq[seq_index]:
+                    current_sequence.append(event)
+                    seq_index += 1
+                    
+                    # If we've completed a sequence
+                    if seq_index >= len(seq):
+                        sequences.append(list(current_sequence))  # Make a copy
+                        break
+                        
+                elif strict and seq_index > 0:
+                    # In strict mode, a non-matching event breaks the sequence
+                    break
+                
+                event_idx += 1
+        
+        # If we didn't find any complete sequences
+        if not sequences:
+            warnings.warn(
+                f"No complete event sequences matching {seq} were found in trial {self.name}."
+            )
+            
+        return sequences
 
     def check_point_gaps(
         self,
@@ -173,13 +243,7 @@ class Trial(TrialBase):
                         gaps[marker].append((gap_start, gap_end))
         
         return gaps
-
-    @model_validator(mode="after")
-    def _cache_point_gaps(self) -> "Trial":
-        """Cache point gaps on initialization."""
-        self.point_gaps = self.check_point_gaps()
-        return self
-
+    
     def find_full_frames(self, marker_names: list[str] | None = None) -> list[int]:
         """
         Find all frames where all specified markers have data.
@@ -373,236 +437,3 @@ class Trial(TrialBase):
         mat_dict["Analog"]["Time"] = self.analogs.time.tolist()
 
         sio.savemat(filepath, mat_dict)
-
-    # TODO: figure out how to decouple from Trial class
-    def export_force_platforms(
-        self,
-        output_dir: str,
-        applied_bodies: dict[
-            int, str
-        ],  # Expects dict of {platform_index (1-based): body_name}
-        force_expressed_in_body: str = "ground",
-        point_expressed_in_body: str = "ground",
-        force_identifier: str = r"force%d_v",
-        point_identifier: str = r"force%d_p",
-        torque_identifier: str = r"moment%d_",
-        rotation: np.ndarray = np.eye(3),
-        mot_filename: str | None = None,
-        external_loads_filename: str | None = None,
-        unit_force: str = "N",
-        unit_position: str = "m",
-        unit_moment: str = "Nm",
-        metadata: dict[str, Any] = {},
-    ):
-        """
-        Export force plate metadata to OpenSim ExternalLoads .xml file and the data to a .mot file.
-
-        For now, extract foot contact from .enf files, but in the future use contact
-        """
-        import opensim as osim
-
-        from ..file_io import get_units_conversion_factor
-
-        ext_loads = osim.ExternalLoads()
-
-        if external_loads_filename is None:
-            external_loads_filename = f"{self.name}_fp_setup.xml"
-        external_loads_filepath = os.path.join(output_dir, external_loads_filename)
-
-        if mot_filename is None:
-            mot_filename = f"{self.name}_FP.mot"
-        mot_filepath = os.path.join(output_dir, mot_filename)
-        mot_labels = []
-        mot_table = osim.TimeSeriesTable()
-        time_col = self.analogs.time
-
-        data = np.zeros(
-            (len(self.force_platforms) * 9, len(time_col))
-        )  # 3 forces, 3 moments, 3 center of pressure
-        for i, fp in enumerate(self.force_platforms):
-            display_i = i + 1  # For display purposes, OpenSim uses 1-based indexing
-            fp_force_identifier = force_identifier % (display_i)
-            fp_point_identifier = point_identifier % (display_i)
-            fp_torque_identifier = torque_identifier % (display_i)
-            mot_labels.extend([fp_force_identifier + coord for coord in "xyz"])
-            mot_labels.extend(
-                [fp_point_identifier + coord for coord in "xyz"]
-            )  # This could be precomputed, but having it next to the data makes it clear what order it should be added
-            mot_labels.extend([fp_torque_identifier + coord for coord in "xyz"])
-            if display_i not in applied_bodies:
-                warnings.warn(
-                    f"Force platform {display_i} does not have an applied body defined. Skipping."
-                )
-                continue
-            # Create ExternalForce for each force platform
-            ext_force = osim.ExternalForce()
-            ext_force.setName(f"FP{str(display_i)}")
-            ext_force.setAppliedToBodyName(applied_bodies[display_i])
-
-            ext_force.setForceExpressedInBodyName(force_expressed_in_body)
-            ext_force.setForceIdentifier(fp_force_identifier)
-
-            ext_force.setPointExpressedInBodyName(point_expressed_in_body)
-            ext_force.setPointIdentifier(fp_point_identifier)
-
-            ext_force.setTorqueIdentifier(fp_torque_identifier)
-
-            ext_force.set_data_source_name(mot_filename)
-
-            ext_loads.cloneAndAppend(ext_force)
-
-            # Determine conversion factors for units
-            (
-                force_conversion_factor,
-                position_conversion_factor,
-                moment_conversion_factor,
-            ) = (1.0, 1.0, 1.0)
-            if fp.unit_force != unit_force:
-                warnings.warn(
-                    f"Force platform {display_i} force unit {fp.unit_force} "
-                    f"does not match output unit {unit_force}. Converting forces."
-                )
-                force_conversion_factor = get_units_conversion_factor(
-                    fp.unit_force, unit_force
-                )
-            if fp.unit_position != unit_position:
-                warnings.warn(
-                    f"Force platform {display_i} position unit {fp.unit_position} "
-                    f"does not match output unit {unit_position}. Converting positions."
-                )
-                position_conversion_factor = get_units_conversion_factor(
-                    fp.unit_position, unit_position
-                )
-            if fp.unit_moment != unit_moment:
-                warnings.warn(
-                    f"Force platform {display_i} torque unit {fp.unit_moment} "
-                    f"does not match output unit {unit_moment}. Converting torques."
-                )
-                moment_conversion_factor = get_units_conversion_factor(
-                    fp.unit_moment, unit_moment
-                )
-
-            # Rotate the force platform data
-            force = (
-                np.array(rotation @ np.array(fp.force).T).T
-                * force_conversion_factor
-                * -1.0
-            )  # OpenSim expects forces to be in the opposite direction
-            cop = (
-                np.array(rotation @ np.array(fp.center_of_pressure).T).T
-                * position_conversion_factor
-            )
-            free_moment = (
-                np.array(rotation @ np.array(fp.free_moment).T).T
-                * moment_conversion_factor
-                * -1.0
-            )  # OpenSim expects moments to be in the opposite direction
-
-            data[i * 9 : i * 9 + 3, :] = force.T  # 3 forces
-            data[i * 9 + 3 : i * 9 + 6, :] = cop.T  # 3 center of pressure
-            data[i * 9 + 6 : i * 9 + 9, :] = free_moment.T  # 3 moments
-
-        for i in range(len(time_col)):
-            mot_table.appendRow(time_col[i], osim.RowVector(data[:, i]))
-
-        mot_table.setColumnLabels(mot_labels)
-
-        for key, value in metadata.items():
-            mot_table.addTableMetaDataString(key, str(value))
-
-        if "nRows" not in metadata:
-            n_frames = self.force_platforms[
-                0
-            ].data.height  # Assuming all platforms have the same number of frames
-            mot_table.addTableMetaDataString("nRows", str(n_frames))
-        if "nColumns" not in metadata:
-            n_columns = (
-                len(self.force_platforms) * 9
-            )  # 3 forces, 3 moments, 3 center of pressure
-            mot_table.addTableMetaDataString("nColumns", str(n_columns))
-        adapter = osim.STOFileAdapter()
-        adapter.write(mot_table, mot_filepath)
-        self.link_file("fp_mot", mot_filepath)
-        ext_loads.setDataFileName(mot_filename)
-        ext_loads.printToXML(external_loads_filepath)
-        self.link_file("fp_setup", external_loads_filepath)
-
-    # TODO: These are definitely not the best implementations, but they work for now
-    def get_stance_phases(
-        self,
-        side: str,
-        foot_strike_label: str = "Foot Strike",
-        foot_off_label: str = "Foot Off",
-    ) -> list[tuple[Event, Event]]:
-        """
-        Get the stance phase for a specific side.
-        Stance phase is defined as the time between foot strike and foot off events for that side.
-        """
-        stance_phases = []
-        foot_strike = None
-        foot_off = None
-        for event in self.events:
-            if event.context == side:
-                if event.label == foot_strike_label:
-                    foot_strike = event
-                elif event.label == foot_off_label and foot_strike:
-                    foot_off = event
-            if foot_strike and foot_off:
-                stance_phases.append((foot_strike, foot_off))
-                foot_strike = None
-                foot_off = None
-        return stance_phases
-
-    def get_swing_phases(
-        self,
-        side: str,
-        foot_off_label: str = "Foot Off",
-        foot_strike_label: str = "Foot Strike",
-    ) -> list[tuple[Event, Event]]:
-        """
-        Get the swing phase for a specific side.
-        Swing phase is defined as the time between foot off and next foot strike events for that side.
-        """
-        swing_phases = []
-        foot_off = None
-        next_foot_strike = None
-        for event in self.events:
-            if event.context == side:
-                if event.label == foot_off_label:
-                    foot_off = event
-                elif event.label == foot_strike_label and foot_off:
-                    next_foot_strike = event
-            if foot_off and next_foot_strike:
-                swing_phases.append((foot_off, next_foot_strike))
-                foot_off = None
-                next_foot_strike = None
-        return swing_phases
-
-    def get_stance_swing_phases(
-        self,
-        side: str,
-        foot_strike_label: str = "Foot Strike",
-        foot_off_label: str = "Foot Off",
-    ) -> list[tuple[Event, Event, Event]]:
-        """
-        Get the coupled stance and swing phases for a specific side.
-        Each tuple contains (foot strike, foot off, next foot strike).
-        """
-        stance_swing_phases = []
-        foot_strike = None
-        foot_off = None
-        next_foot_strike = None
-        for event in self.events:
-            if event.context == side:
-                if event.label == foot_strike_label and not foot_strike:
-                    foot_strike = event
-                elif event.label == foot_off_label and foot_strike:
-                    foot_off = event
-                elif event.label == foot_strike_label and foot_off:
-                    next_foot_strike = event
-            if foot_strike and foot_off and next_foot_strike:
-                stance_swing_phases.append((foot_strike, foot_off, next_foot_strike))
-                foot_strike = next_foot_strike
-                foot_off = None
-                next_foot_strike = None
-        return stance_swing_phases
