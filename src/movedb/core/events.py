@@ -14,8 +14,8 @@ class Event(BaseModel):
     Exactly one of 'frame' or 'time' must be provided.
     """
 
-    label: str
     context: str
+    label: str
     frame: int | None = Field(default=None, description="Frame number")
     time: float | None = Field(default=None, description="Time in seconds")
     description: str | None = None
@@ -24,8 +24,8 @@ class Event(BaseModel):
     def from_c3d(cls, c3d_obj: ezc3d.c3d, index: int = 0) -> "Event":
         if not "EVENT" in c3d_obj.parameters:
             raise ValueError("C3D object does not contain EVENT parameters.")
-        label = get_c3d_param(c3d_obj, "EVENT", "LABELS", index=index, default="")
         context = get_c3d_param(c3d_obj, "EVENT", "CONTEXTS", index=index, default="")
+        label = get_c3d_param(c3d_obj, "EVENT", "LABELS", index=index, default="")
         # Get time in seconds from (min, sec) format
         time_min, time_sec=  get_c3d_param(
             c3d_obj, "EVENT", "TIMES", default=[[None, None]]
@@ -38,8 +38,8 @@ class Event(BaseModel):
             c3d_obj, "EVENT", "DESCRIPTIONS", index=index, default=""
         )
         return cls(
-            label=label,
             context=context,
+            label=label,
             time=time_min * 60 + time_sec,  # Convert from (min, sec) to sec
             description=description,
         )

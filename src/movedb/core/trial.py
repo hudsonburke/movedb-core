@@ -74,10 +74,11 @@ class Trial(TrialBase):
 
     def get_event_sequences(self, seq: list[tuple[str, str]], repeat: bool = False, strict: bool = False) -> list[list[Event]]:
         """
-        Get sequences of events based on a list of (label, context) tuples.
+        Get sequences of events based on a list of (context, label) tuples.
         
         Args:
-            seq: A list of (label, context) tuples defining the event sequence to find.
+            seq: A list of (context, label) tuples defining the event sequence to find.
+                 For example: [("Left", "Foot Strike"), ("Left", "Foot Off")]
             repeat: If True, find all occurrences of the sequence, including overlapping ones. 
                    If False, only find the first complete occurrence.
             strict: If True, only match sequences where events appear consecutively without interruptions.
@@ -87,198 +88,40 @@ class Trial(TrialBase):
             A list of event sequences, where each sequence is a list of Event objects.
             If repeat=False, the list will contain at most one sequence.
         """
-        if not seq:
+        if not seq or not self.events:
             return []
             
         sequences = []
+        event_sequence = [(event.context, event.label) for event in self.events]
         
-        # If not in repeat mode, just find the first occurrence
-        if not repeat:
-            current_sequence = []
-            seq_index = 0
-            
-            for event in self.events:
-                if (event.label, event.context) == seq[seq_index]:
-                    current_sequence.append(event)
-                    seq_index += 1
-                    
-                    # If we've completed the sequence
-                    if seq_index >= len(seq):
-                        sequences.append(current_sequence)
+        if strict:
+            # For strict mode, check consecutive sequences
+            for start in range(len(event_sequence) - len(seq) + 1):
+                if event_sequence[start:start + len(seq)] == seq:
+                    matched_events = self.events[start:start + len(seq)]
+                    sequences.append(matched_events)
+                    if not repeat:
                         break
-                elif strict and seq_index > 0:
-                    # In strict mode, reset sequence if we encounter a non-matching event
-                    current_sequence = []
-                    seq_index = 0
-                    
-                    # Check if this event could start a new sequence
-                    if (event.label, event.context) == seq[0]:
-                        current_sequence.append(event)
-                        seq_index = 1
-            
-            # Warn if we didn't find a complete sequence
-            if not sequences:
-                warnings.warn(
-                    f"No complete event sequence matching {seq} was found in trial {self.name}."
-                )
+        else:
+            # For non-strict mode, allow gaps between sequence elements
+            for start in range(len(event_sequence)):
+                matched_events = []
+                seq_idx = 0
                 
-            return sequences
-        
-        # In repeat mode, find all occurrences (including overlapping ones)
-        # by starting a search from each event
-        for start_idx in range(len(self.events)):
-            current_sequence = []
-            seq_index = 0
-            event_idx = start_idx
-            
-            while event_idx < len(self.events):
-                event = self.events[event_idx]
-                
-                if (event.label, event.context) == seq[seq_index]:
-                    current_sequence.append(event)
-                    seq_index += 1
-                    
-                    # If we've completed a sequence
-                    if seq_index >= len(seq):
-                        sequences.append(list(current_sequence))  # Make a copy
+                for i in range(start, len(event_sequence)):
+                    if seq_idx >= len(seq):
                         break
-                        
-                elif strict and seq_index > 0:
-                    # In strict mode, a non-matching event breaks the sequence
-                    break
+                    
+                    if event_sequence[i] == seq[seq_idx]:
+                        matched_events.append(self.events[i])
+                        seq_idx += 1
                 
-                event_idx += 1
-        
-        # If we didn't find any complete sequences
-        if not sequences:
-            warnings.warn(
-                f"No complete event sequences matching {seq} were found in trial {self.name}."
-            )
-            
+                if seq_idx == len(seq):  # Found complete sequence
+                    sequences.append(matched_events)
+                    if not repeat:
+                        break
+
         return sequences
-
-    def check_point_gaps(
-        self,
-        marker_names: list[str] | None = None,
-        regions: list[tuple[int, int] | tuple[float, float]] | None = None,
-    ) -> dict[str, list[tuple[int, int]]]:
-        """
-        Check for gaps in point data for specified markers and regions.
-        A gap is defined as any frame in the region where the marker data is missing (NaN).
-        Returns a dictionary with marker names as keys and lists of (start, end) tuples indicating integer frame gaps.
-
-        If no markers or regions are specified, checks all markers and the entire trial duration.
-        If already computed and no specific markers/regions requested, return the cached result.
-        """
-
-        # Only use cached result if no specific markers or regions are requested
-        if (self.point_gaps and 
-            marker_names is None and 
-            regions is None):
-            return self.point_gaps.copy()
-
-        gaps = {}
-        if marker_names is None:
-            marker_names = list(self.points.trajectories.keys())
-        if regions is None:
-            regions = [(self.points.first_frame, self.points.last_frame)]
-
-        for region in regions:
-            start, end = region
-            if isinstance(start, float):
-                start = int(start * self.points.rate)
-            if isinstance(end, float):
-                end = int(end * self.points.rate)
-            
-            # Convert absolute frames to relative indices
-            start_idx = start - self.points.first_frame
-            end_idx = end - self.points.first_frame
-            
-            # Ensure indices are within bounds
-            start_idx = max(0, start_idx)
-            end_idx = min(self.points.total_frames - 1, end_idx)
-            
-            for marker in marker_names:
-                if marker not in self.points.trajectories:
-                    if marker not in gaps:
-                        gaps[marker] = []
-                    gaps[marker].append((start, end))
-                    continue
-                    
-                marker_data = self.points.trajectories[marker].data
-                
-                # Find actual gap boundaries within the region
-                gap_starts = []
-                gap_ends = []
-                in_gap = False
-                
-                for i in range(start_idx, end_idx + 1):
-                    # Check if any coordinate is null or NaN at this frame
-                    row = marker_data[i]
-                    has_null = (row.select(pl.col("x").is_null()).item() or 
-                               row.select(pl.col("y").is_null()).item() or 
-                               row.select(pl.col("z").is_null()).item())
-                    has_nan = (row.select(pl.col("x").is_nan()).item() or 
-                              row.select(pl.col("y").is_nan()).item() or 
-                              row.select(pl.col("z").is_nan()).item())
-                    
-                    if (has_null or has_nan) and not in_gap:
-                        # Start of a gap
-                        gap_starts.append(i + self.points.first_frame)
-                        in_gap = True
-                    elif not (has_null or has_nan) and in_gap:
-                        # End of a gap
-                        gap_ends.append(i + self.points.first_frame - 1)
-                        in_gap = False
-                
-                # Handle case where gap extends to end of region
-                if in_gap:
-                    gap_ends.append(end)
-                
-                # Create gap tuples
-                if gap_starts:
-                    if marker not in gaps:
-                        gaps[marker] = []
-                    for gap_start, gap_end in zip(gap_starts, gap_ends):
-                        gaps[marker].append((gap_start, gap_end))
-        
-        return gaps
-    
-    def find_full_frames(self, marker_names: list[str] | None = None) -> list[int]:
-        """
-        Find all frames where all specified markers have data.
-        If no markers are specified, checks all markers.
-        Returns a list of frame indices (absolute frame numbers).
-        """
-        if marker_names is None:
-            marker_names = list(self.points.trajectories.keys())
-        
-        # Start with all possible frames
-        full_frames = set(range(self.points.first_frame, self.points.last_frame + 1))
-        
-        for marker in marker_names:
-            if marker not in self.points.trajectories:
-                return []  # If any marker is missing, no frames can be full
-            
-            marker_data = self.points.trajectories[marker].data
-            
-            # Find frames where this marker has complete data
-            marker_full_indices = []
-            for i in range(marker_data.height):
-                row = marker_data[i]
-                has_complete_data = (not row.select(pl.col("x").is_null()).item() and 
-                                   not row.select(pl.col("y").is_null()).item() and 
-                                   not row.select(pl.col("z").is_null()).item() and
-                                   not row.select(pl.col("x").is_nan()).item() and 
-                                   not row.select(pl.col("y").is_nan()).item() and 
-                                   not row.select(pl.col("z").is_nan()).item())
-                if has_complete_data:
-                    marker_full_indices.append(i + self.points.first_frame)
-            
-            marker_full_frames = set(marker_full_indices)
-            full_frames &= marker_full_frames
-            
-        return sorted(full_frames)
 
     # Factory methods for creating Trial instances
     @classmethod

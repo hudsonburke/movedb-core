@@ -13,8 +13,6 @@ from pydantic import AfterValidator, BaseModel, model_validator
 from movedb.utils import get_c3d_param
 
 # TODO: Consolidate data from Analogs and Points so that can share common functionality
-
-
 class TimeSeriesGroup(BaseModel):
     first_frame: int
     last_frame: int
@@ -106,6 +104,90 @@ class MarkerTrajectory(BaseModel):
         """Return residuals as numpy array (n_frames,)"""
         return self.data.select(["residual"]).to_numpy().flatten()
 
+    def get_gaps(self, regions: list[tuple[int, int]] = []) -> list[tuple[int, int]]:
+        """
+        Find gaps in this marker trajectory.
+        
+        Args:
+            regions: List of (start, end) tuples in relative frame indices (0-based)
+        
+        Returns:
+            List of (start, end) tuples of gap ranges in relative frame indices
+        """
+        if not regions:
+            regions = [(0, self.data.height - 1)]
+        gaps = []
+        for start, end in regions:
+            # Ensure start and end are within bounds
+            start = max(start, 0)
+            end = min(end, self.data.height - 1)
+            
+            trimmed_data = self.data.slice(start, end - start + 1)
+            if trimmed_data.height == 0:
+                continue
+            # Get indices of frames where data is missing
+            missing_mask = (
+                trimmed_data.select(pl.col("x").is_null() |
+                                    pl.col("x").is_nan() | 
+                                    pl.col("y").is_null() | 
+                                    pl.col("y").is_nan() | 
+                                    pl.col("z").is_null() | 
+                                    pl.col("z").is_nan())
+            ).to_numpy().flatten()
+            if not np.any(missing_mask):
+                continue
+            # Convert mask to frame ranges using diff to find transitions
+            # Add padding to handle edge cases
+            padded_mask = np.concatenate(([False], missing_mask, [False]))
+            # Find transitions: False->True (gap starts) and True->False (gap ends)
+            diff = np.diff(padded_mask.astype(int))
+            gap_starts = np.where(diff == 1)[0]  # Transitions from 0 to 1
+            gap_ends = np.where(diff == -1)[0] - 1  # Transitions from 1 to 0, adjust by -1
+            
+            # Convert to relative frame indices (adjusted for the start offset)
+            for gap_start, gap_end in zip(gap_starts, gap_ends):
+                gaps.append((gap_start + start, gap_end + start))
+        return gaps
+
+    def find_full_frames(self, regions: list[tuple[int, int]] = []) -> list[int]:
+        """
+        Find all frames where this marker has complete data (no NaN/null values).
+        
+        Args:
+            regions: List of (start, end) tuples in relative frame indices (0-based)
+        
+        Returns:
+            List of relative frame indices where marker has complete data
+        """
+        if not regions:
+            regions = [(0, self.data.height - 1)]
+        
+        full_frames = []
+        for start, end in regions:
+            # Ensure start and end are within bounds
+            start = max(start, 0)
+            end = min(end, self.data.height - 1)
+            
+            # Get the region data
+            region_data = self.data.slice(start, end - start + 1)
+            
+            # Create mask for complete data (not null and not NaN)
+            complete_mask = (
+                region_data.select(
+                    ~(pl.col("x").is_null() | pl.col("x").is_nan() |
+                      pl.col("y").is_null() | pl.col("y").is_nan() |
+                      pl.col("z").is_null() | pl.col("z").is_nan())
+                )
+            ).to_numpy().flatten()
+            
+            # Get indices where data is complete
+            complete_indices = np.where(complete_mask)[0]
+            
+            # Convert to absolute relative indices (adjust for start offset)
+            full_frames.extend(complete_indices + start)
+        
+        return sorted(full_frames)
+
     def __len__(self) -> int:
         return len(self.data)
 
@@ -177,17 +259,16 @@ class Points(TimeSeriesGroup):
 
         dfs = []
         for name, trajectory in self.trajectories.items():
-            prefix = name
             traj_df = trajectory.data.rename(
                 {
-                    "x": f"{prefix}_x",
-                    "y": f"{prefix}_y",
-                    "z": f"{prefix}_z",
-                    "residual": f"{prefix}_residual",
+                    "x": f"{name}_x",
+                    "y": f"{name}_y",
+                    "z": f"{name}_z",
+                    "residual": f"{name}_residual",
                 }
             )
             if not include_residual:
-                traj_df = traj_df.drop(f"{prefix}_residual")
+                traj_df = traj_df.drop(f"{name}_residual")
             dfs.append(traj_df)
         # Concatenate horizontally
         return pl.concat(dfs, how="horizontal")
@@ -223,6 +304,86 @@ class Points(TimeSeriesGroup):
         # Convert absolute frame to relative index
         frame_idx = frame - self.first_frame
         return marker.coords[frame_idx]
+
+    def get_gaps(
+        self,
+        marker_names: list[str] | None = None,
+        regions: list[tuple[int, int] | tuple[float, float]] | None = None,
+    ) -> dict[str, list[tuple[int, int]]]:
+        """
+        Check for gaps in point data for specified markers and regions.
+        A gap is defined as any frame in the region where the marker data is missing (NaN).
+        Returns a dictionary with marker names as keys and lists of (start, end) tuples indicating integer frame gaps.
+
+        If no markers or regions are specified, checks all markers and the entire trial duration.
+        """
+        gaps = {}
+        if marker_names is None:
+            marker_names = list(self.trajectories.keys())
+        
+        # Convert regions to relative frame indices
+        if regions is None:
+            relative_regions = [(0, self.total_frames - 1)]
+        else:
+            relative_regions = []
+            for start, end in regions:
+                # Convert time to frames if needed
+                start = int(start * self.rate) if isinstance(start, float) else start
+                end = int(end * self.rate) if isinstance(end, float) else end
+                # Convert absolute frames to relative indices
+                rel_start = max(start - self.first_frame, 0)
+                rel_end = min(end - self.first_frame, self.total_frames - 1)
+                relative_regions.append((rel_start, rel_end))
+        
+        # Get gaps for each marker
+        for marker in marker_names:
+            if marker not in self.trajectories:
+                gaps[marker] = []
+                continue
+            
+            marker_gaps = self.trajectories[marker].get_gaps(relative_regions)
+            # Convert relative gaps back to absolute frame numbers
+            absolute_gaps = [
+                (gap_start + self.first_frame, gap_end + self.first_frame)
+                for gap_start, gap_end in marker_gaps
+            ]
+            gaps[marker] = absolute_gaps
+        
+        return gaps
+    
+    def find_full_frames(self, marker_names: list[str] | None = None) -> list[int]:
+        """
+        Find all frames where all specified markers have data.
+        If no markers are specified, checks all markers.
+        Returns a list of frame indices (absolute frame numbers).
+        """
+        if marker_names is None:
+            marker_names = list(self.trajectories.keys())
+        
+        # If no markers specified or no trajectories, return empty list
+        if not marker_names or not self.trajectories:
+            return []
+        
+        # Check if all specified markers exist
+        missing_markers = [m for m in marker_names if m not in self.trajectories]
+        if missing_markers:
+            return []  # If any marker is missing, no frames can be full
+        
+        # Start with all possible frames
+        full_frames = set(range(self.first_frame, self.last_frame + 1))
+        
+        # Get gaps for all specified markers
+        gaps = self.get_gaps(marker_names)
+        
+        # Remove all frames that have gaps in any marker
+        for marker in marker_names:
+            marker_gaps = gaps.get(marker, [])
+            for gap_start, gap_end in marker_gaps:
+                # Remove all frames in this gap
+                gap_frames = set(range(gap_start, gap_end + 1))
+                full_frames -= gap_frames
+        
+        return sorted(full_frames)
 
     def add_marker(
         self,

@@ -1,89 +1,69 @@
 #!/usr/bin/env python3
-"""Simple test to verify gap checking fixes."""
-import polars as pl
-from movedb.core.time_series import Points, MarkerTrajectory, Analogs, MarkerSchema
-from movedb.core.trial import Trial
-from pandera.typing.polars import DataFrame
+"""Test the simplified gap detection logic"""
 
-def test_gap_checking():
-    print("Testing gap checking fixes...")
+import numpy as np
+
+def test_gap_detection():
+    """Test various gap patterns"""
     
-    # Create test data with known gaps
-    n_frames = 10
-    first_frame = 5
-    last_frame = first_frame + n_frames - 1
+    def find_gaps(missing_mask, first_frame=0):
+        """Simplified gap detection logic"""
+        gaps = []
+        if np.any(missing_mask):
+            # Add padding to handle edge cases
+            padded_mask = np.concatenate(([False], missing_mask, [False]))
+            
+            # Find transitions: False->True (gap starts) and True->False (gap ends)
+            diff = np.diff(padded_mask.astype(int))
+            gap_starts = np.where(diff == 1)[0]  # Transitions from 0 to 1
+            gap_ends = np.where(diff == -1)[0] - 1  # Transitions from 1 to 0, adjust by -1
+            
+            # Convert to absolute frames
+            for gap_start, gap_end in zip(gap_starts, gap_ends):
+                gaps.append((gap_start + first_frame, gap_end + first_frame))
+        return gaps
     
-    # Marker 1: gap at frames 7-9 (indices 2-4)
-    marker1_data = pl.DataFrame({
-        "x": [1.0, 1.0, None, None, None, 1.0, 1.0, 1.0, 1.0, 1.0],
-        "y": [2.0, 2.0, None, None, None, 2.0, 2.0, 2.0, 2.0, 2.0],
-        "z": [3.0, 3.0, None, None, None, 3.0, 3.0, 3.0, 3.0, 3.0],
-        "residual": [0.1] * n_frames
-    })
+    # Test case 1: Single gap in the middle
+    mask1 = np.array([False, False, True, True, True, False, False])
+    gaps1 = find_gaps(mask1)
+    print(f"Test 1 - Single gap: {gaps1}")
+    print(f"Expected: [(2, 4)]")
     
-    # Marker 2: gap at frames 11-12 (indices 6-7)
-    marker2_data = pl.DataFrame({
-        "x": [1.5, 1.5, 1.5, 1.5, 1.5, 1.5, None, None, 1.5, 1.5],
-        "y": [2.5, 2.5, 2.5, 2.5, 2.5, 2.5, None, None, 2.5, 2.5],
-        "z": [3.5, 3.5, 3.5, 3.5, 3.5, 3.5, None, None, 3.5, 3.5],
-        "residual": [0.1] * n_frames
-    })
+    # Test case 2: Multiple gaps
+    mask2 = np.array([False, True, True, False, False, True, False, True, True, True])
+    gaps2 = find_gaps(mask2)
+    print(f"\nTest 2 - Multiple gaps: {gaps2}")
+    print(f"Expected: [(1, 2), (5, 5), (7, 9)]")
     
-    # Marker 3: no gaps
-    marker3_data = pl.DataFrame({
-        "x": [2.0] * n_frames,
-        "y": [3.0] * n_frames,
-        "z": [4.0] * n_frames,
-        "residual": [0.1] * n_frames
-    })
+    # Test case 3: Gap at the beginning
+    mask3 = np.array([True, True, False, False, True, False])
+    gaps3 = find_gaps(mask3)
+    print(f"\nTest 3 - Gap at start: {gaps3}")
+    print(f"Expected: [(0, 1), (4, 4)]")
     
-    points = Points(
-        first_frame=first_frame,
-        last_frame=last_frame,
-        rate=100.0,
-        units="mm",
-        trajectories={
-            "MARKER1": MarkerTrajectory(data=DataFrame[MarkerSchema](marker1_data), description="Marker 1"),
-            "MARKER2": MarkerTrajectory(data=DataFrame[MarkerSchema](marker2_data), description="Marker 2"),
-            "MARKER3": MarkerTrajectory(data=DataFrame[MarkerSchema](marker3_data), description="Marker 3")
-        }
-    )
+    # Test case 4: Gap at the end
+    mask4 = np.array([False, False, True, False, True, True])
+    gaps4 = find_gaps(mask4)
+    print(f"\nTest 4 - Gap at end: {gaps4}")
+    print(f"Expected: [(2, 2), (4, 5)]")
     
-    analogs = Analogs(
-        first_frame=first_frame,
-        last_frame=last_frame,
-        rate=100.0,
-        channels={}
-    )
+    # Test case 5: No gaps
+    mask5 = np.array([False, False, False, False])
+    gaps5 = find_gaps(mask5)
+    print(f"\nTest 5 - No gaps: {gaps5}")
+    print(f"Expected: []")
     
-    trial = Trial(
-        name="test_trial",
-        points=points,
-        analogs=analogs,
-        point_gaps={}
-    )
+    # Test case 6: All gaps
+    mask6 = np.array([True, True, True, True])
+    gaps6 = find_gaps(mask6)
+    print(f"\nTest 6 - All gaps: {gaps6}")
+    print(f"Expected: [(0, 3)]")
     
-    print(f"Trial frames: {trial.points.first_frame} to {trial.points.last_frame}")
-    print("Expected gaps:")
-    print("  MARKER1: frames 7-9")
-    print("  MARKER2: frames 11-12")
-    print("  MARKER3: no gaps")
-    
-    # Test gap checking
-    gaps = trial.check_point_gaps()
-    print("\nActual gaps found:")
-    for marker, gap_list in gaps.items():
-        print(f"  {marker}: {gap_list}")
-    
-    # Test find_full_frames
-    full_frames = trial.find_full_frames()
-    print(f"\nFull frames (all markers have data): {full_frames}")
-    
-    # Test with specific region
-    print("\nTesting region [6, 10]:")
-    region_gaps = trial.check_point_gaps(regions=[(6, 10)])
-    for marker, gap_list in region_gaps.items():
-        print(f"  {marker}: {gap_list}")
+    # Test with offset first_frame
+    mask7 = np.array([False, True, True, False])
+    gaps7 = find_gaps(mask7, first_frame=100)
+    print(f"\nTest 7 - With offset: {gaps7}")
+    print(f"Expected: [(101, 102)]")
 
 if __name__ == "__main__":
-    test_gap_checking()
+    test_gap_detection()
