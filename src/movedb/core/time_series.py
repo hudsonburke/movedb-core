@@ -1,6 +1,6 @@
 """Time series data structures for biomechanical trials."""
 
-import warnings
+from loguru import logger
 from typing import Annotated
 
 import ezc3d
@@ -211,11 +211,11 @@ class Points(TimeSeriesGroup):
         )
         point_rate = get_c3d_param(c3d_object, "POINT", "RATE", default=camera_rate)
         if camera_rate != header_rate:
-            warnings.warn(
+            logger.warning(
                 f"Camera rate {camera_rate} does not match header rate {header_rate}. Defaulting to camera rate."
             )
         if point_rate != camera_rate:
-            warnings.warn(
+            logger.warning(
                 f"Point rate {point_rate} does not match camera rate {camera_rate}. Defaulting to point rate."
             )
 
@@ -484,7 +484,7 @@ class Analogs(TimeSeriesGroup):
 
         analog_rate = get_c3d_param(c3d_object, "ANALOG", "RATE", default=header_rate)
         if analog_rate != header_rate:
-            warnings.warn(
+            logger.warning(
                 f"Analog rate {analog_rate} does not match header rate {header_rate}. Defaulting to analog rate."
             )
 

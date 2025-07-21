@@ -196,11 +196,11 @@ def sto_to_df(file_path: str) -> tuple[pl.DataFrame, dict[str, str]]:
     Returns:
         tuple: A tuple containing a Polars DataFrame with the data and a dictionary with metadata.
     """
-    import warnings
+    from loguru import logger
 
     from ..file_io import sto_to_df as new_sto_to_df
 
-    warnings.warn(
+    logger.warning(
         "sto_to_df has been moved to movedb.file_io.sto_to_df. "
         "Please update your imports. This function will be removed in v0.2.0.",
         DeprecationWarning,
@@ -224,11 +224,11 @@ def parse_enf_file(file_path: str, encoding: str = "utf-8") -> dict[str, str]:
     Returns:
         Dictionary with lowercase keys and their values
     """
-    import warnings
+    from loguru import logger
 
     from ..file_io import parse_enf_file as new_parse_enf_file
 
-    warnings.warn(
+    logger.warning(
         "parse_enf_file has been moved to movedb.file_io.parse_enf_file. "
         "Please update your imports. This function will be removed in v0.2.0.",
         DeprecationWarning,

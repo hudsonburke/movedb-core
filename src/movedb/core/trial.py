@@ -1,6 +1,6 @@
 import os
 import pickle
-import warnings
+from loguru import logger
 from typing import Any, Type, TypeVar
 
 import ezc3d
