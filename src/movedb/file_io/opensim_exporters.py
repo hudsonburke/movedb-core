@@ -97,7 +97,8 @@ def export_trc(
 def export_mot(
     filepath: str,
     data: pl.DataFrame,
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = {},
+    nans_as_zero: bool = True,
     ):
     """
     Export data to OpenSim MOT file format.
@@ -108,6 +109,12 @@ def export_mot(
     
     if "time" not in data.columns:
         raise ValueError("Data must contain a 'time' column for MOT export")
+    
+    if nans_as_zero:
+        # Replace NaNs with zeros in the data
+        data = data.with_columns(
+            [pl.col(col).fill_nan(0.0) for col in data.columns if col != "time"]
+        )
     
     for row in data.iter_rows(named=True):
         time_val = row["time"]

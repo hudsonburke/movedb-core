@@ -5,9 +5,8 @@ from typing import Annotated
 import ezc3d
 import numpy as np
 import pandera.polars as pa
-import polars as pl
 from pandera.typing.polars import DataFrame
-from pydantic import AfterValidator, BaseModel, model_validator
+from pydantic import AfterValidator, BaseModel
 from movedb.file_io import get_units_conversion_factor
 from movedb.core.shaped_arrays import (
     Corners3x4,
@@ -108,121 +107,6 @@ class EZForcePlatform(BaseModel):
             origin=fp.get("origin", np.zeros(3)),
             data=DataFrame[ForcePlatformSchema](data_dict),
         )
-
-    @model_validator(mode="after")
-    def validate_cop_and_tz_not_nan(self) -> "EZForcePlatform":
-        """Calculate center of pressure and free moment from force and moment if not provided or contain NaN values."""        
-        # Get force and moment data
-        force = self.get_force(units="N")  # (n_frames, 3)
-        moment = self.get_moment(units="Nm")  # (n_frames, 3)
-
-        # Get current COP and free moment data
-        cop = self.get_center_of_pressure(units="m")
-        free_moment = self.get_free_moment(units="Nm")
-
-        # Check if COP has NaN values and calculate if needed
-        cop_has_nan = np.isnan(cop).any()
-        if cop_has_nan:
-            # Calculate center of pressure from force and moment
-            # COP_x = -M_y / F_z, COP_y = M_x / F_z, COP_z = 0 (assuming force platform is at z=0)
-            calculated_cop = np.zeros_like(cop)
-            
-            # Only calculate where F_z is not zero or very small
-            valid_fz = np.abs(force[:, 2]) > 1e-6  # Avoid division by very small forces
-            
-            calculated_cop[valid_fz, 0] = -moment[valid_fz, 1] / force[valid_fz, 2]  # COP_x
-            calculated_cop[valid_fz, 1] = moment[valid_fz, 0] / force[valid_fz, 2]   # COP_y
-            calculated_cop[:, 2] = 0.0  # COP_z = 0 for force platform
-            
-            # Where F_z is too small, set COP to zero
-            calculated_cop[~valid_fz, :] = 0.0
-            
-            # Create replacement series
-            cop_x_series = pl.Series("cop_x_replacement", calculated_cop[:, 0])
-            cop_y_series = pl.Series("cop_y_replacement", calculated_cop[:, 1])
-            cop_z_series = pl.Series("cop_z_replacement", calculated_cop[:, 2])
-            
-            # Add replacement columns temporarily 
-            temp_df = self.data.with_columns([cop_x_series, cop_y_series, cop_z_series])
-            
-            # Update the data by replacing NaN values
-            updated_df = temp_df.with_columns([
-                pl.when(pl.col("center_of_pressure_x").is_nan())
-                .then(pl.col("cop_x_replacement"))
-                .otherwise(pl.col("center_of_pressure_x"))
-                .alias("center_of_pressure_x"),
-                
-                pl.when(pl.col("center_of_pressure_y").is_nan())
-                .then(pl.col("cop_y_replacement"))
-                .otherwise(pl.col("center_of_pressure_y"))
-                .alias("center_of_pressure_y"),
-                
-                pl.when(pl.col("center_of_pressure_z").is_nan())
-                .then(pl.col("cop_z_replacement"))
-                .otherwise(pl.col("center_of_pressure_z"))
-                .alias("center_of_pressure_z")
-            ]).drop(["cop_x_replacement", "cop_y_replacement", "cop_z_replacement"])
-            
-            self.data = DataFrame[ForcePlatformSchema](updated_df)
-        
-        # Check if free moment has NaN values and calculate if needed
-        free_moment_has_nan = np.isnan(free_moment).any()
-        if free_moment_has_nan:
-            # Calculate free moment (torque about vertical axis through COP)
-            # Free moment is the moment about the vertical axis that cannot be explained by forces
-            # Typically only the z-component (Tz) is non-zero for vertical force platforms
-            
-            # Get the updated COP values
-            updated_cop = self.get_center_of_pressure(units="m")
-            
-            # Free moment calculation: Tz = M_z - (F_x * COP_y - F_y * COP_x)
-            calculated_free_moment = np.zeros_like(free_moment)
-            
-            # Calculate free moment about z-axis
-            calculated_free_moment[:, 2] = (moment[:, 2] - 
-                                           (force[:, 0] * updated_cop[:, 1] - force[:, 1] * updated_cop[:, 0]))
-            
-            # Free moments about x and y axes are typically zero for force platforms
-            calculated_free_moment[:, 0] = 0.0
-            calculated_free_moment[:, 1] = 0.0
-            
-            # Update the data with calculated free moment using proper NaN detection
-            # Create replacement series
-            fm_x_series = pl.Series("fm_x_replacement", calculated_free_moment[:, 0])
-            fm_y_series = pl.Series("fm_y_replacement", calculated_free_moment[:, 1])
-            fm_z_series = pl.Series("fm_z_replacement", calculated_free_moment[:, 2])
-            
-            # Add replacement columns temporarily 
-            temp_df = self.data.with_columns([fm_x_series, fm_y_series, fm_z_series])
-            
-            # Update the data by replacing NaN values
-            updated_df = temp_df.with_columns([
-                pl.when(pl.col("free_moment_x").is_nan())
-                .then(pl.col("fm_x_replacement"))
-                .otherwise(pl.col("free_moment_x"))
-                .alias("free_moment_x"),
-                
-                pl.when(pl.col("free_moment_y").is_nan())
-                .then(pl.col("fm_y_replacement"))
-                .otherwise(pl.col("free_moment_y"))
-                .alias("free_moment_y"),
-                
-                pl.when(pl.col("free_moment_z").is_nan())
-                .then(pl.col("fm_z_replacement"))
-                .otherwise(pl.col("free_moment_z"))
-                .alias("free_moment_z")
-            ]).drop(["fm_x_replacement", "fm_y_replacement", "fm_z_replacement"])
-            
-            self.data = DataFrame[ForcePlatformSchema](updated_df)
-
-        # Final validation to ensure no NaN values remain
-        final_cop = self.get_center_of_pressure(units="m")
-        final_free_moment = self.get_free_moment(units="Nm")
-
-        if np.isnan(final_cop).any() or np.isnan(final_free_moment).any():
-            raise ValueError("Center of pressure and free moment cannot contain NaN values after calculation.")
-        
-        return self
 
     @classmethod
     def _create_data_dict(
