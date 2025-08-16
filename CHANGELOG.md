@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `loguru` dependency (replaced with standard warnings module for better compatibility)
 
 ### Fixed
-- Fixed undefined `logger` reference in `opensim_exporters.py` by replacing with `warnings.warn()`
+- Fixed undefined `logger` reference in `opensim_exporters.py` by replacing with `logger.warning()`
 
 ## [0.3.0] - 2024
 

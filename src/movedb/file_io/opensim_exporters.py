@@ -2,7 +2,7 @@
 
 import os
 from typing import TYPE_CHECKING, Any
-import warnings
+from loguru import logger
 from pydantic import BaseModel
 import polars as pl
 import numpy as np
@@ -19,7 +19,7 @@ else:
     except ImportError:
         OPENSIM_AVAILABLE = False
         osim = None  # type: ignore
-        warnings.warn(
+        logger.warning(
             "OpenSim not available. OpenSim export features will be disabled.",
             UserWarning,
             stacklevel=2
@@ -65,7 +65,7 @@ def export_trc(
     table.setColumnLabels(marker_names)
     conversion_factor = 1.0
     if output_units is not None and units != output_units:
-        warnings.warn(
+        logger.warning(
             f"Output units {output_units} do not match points units {units}. Converting coordinates."
         )
         conversion_factor = get_units_conversion_factor(units, output_units)
@@ -97,7 +97,8 @@ def export_trc(
 def export_mot(
     filepath: str,
     data: pl.DataFrame,
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = {},
+    nans_as_zero: bool = True,
     ):
     """
     Export data to OpenSim MOT file format.
@@ -108,6 +109,12 @@ def export_mot(
     
     if "time" not in data.columns:
         raise ValueError("Data must contain a 'time' column for MOT export")
+    
+    if nans_as_zero:
+        # Replace NaNs with zeros in the data
+        data = data.with_columns(
+            [pl.col(col).fill_nan(0.0) for col in data.columns if col != "time"]
+        )
     
     for row in data.iter_rows(named=True):
         time_val = row["time"]
@@ -120,7 +127,7 @@ def export_mot(
     n_rows = len(data)
     metadata_rows = metadata.pop("nRows", None)
     if metadata_rows is not None and str(metadata_rows) != str(n_rows):
-        warnings.warn(
+        logger.warning(
             f"Metadata 'nRows' does not match data length: {metadata.get('nRows', 'None')} != {n_rows}"
         )
     mot_table.addTableMetaDataString("nRows", str(n_rows))
@@ -128,7 +135,7 @@ def export_mot(
     n_columns = len(data.columns)
     metadata_columns = metadata.pop("nColumns", None)
     if metadata_columns is not None and str(metadata_columns) != str(n_columns):
-        warnings.warn(
+        logger.warning(
             f"Metadata 'nColumns' does not match data columns: {metadata.get('nColumns', 'None')} != {n_columns}"
         )
     mot_table.addTableMetaDataString("nColumns", str(n_columns))

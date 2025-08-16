@@ -5,7 +5,6 @@ from typing import Annotated
 import ezc3d
 import numpy as np
 import pandera.polars as pa
-import polars as pl
 from pandera.typing.polars import DataFrame
 from pydantic import AfterValidator, BaseModel
 from movedb.file_io import get_units_conversion_factor
@@ -51,10 +50,6 @@ class EZForcePlatform(BaseModel):
 
     All shape validations are enforced using Pydantic validators with clear error messages.
     """
-
-    # class Config:
-    #     arbitrary_types_allowed = True
-
     unit_force: str = "N"
     unit_moment: str = "Nm"
     unit_position: str = "m"
