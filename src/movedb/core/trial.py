@@ -1,5 +1,4 @@
 import pickle
-from loguru import logger
 from typing import Any, Type, TypeVar
 
 import ezc3d
@@ -12,22 +11,13 @@ from .events import Event
 from .force_platforms import EZForcePlatform
 from .time_series import Analogs, Points
 
-# from sqlmodel import SQLModel, Field, Relationship, SQLModel, JSON, Column
+from sqlmodel import SQLModel, Field, Relationship, SQLModel, JSON, Column
 
 # Define a TypeVar that is bound by the Trial class itself
 _T = TypeVar("_T", bound="Trial")
 
 
-class TrialBase(BaseModel):
-    """Base trial class that can be extended by database models."""
-
-    name: str
-    session_name: str = ""
-    subject_names: list[str] = []
-    classification: str = ""
-
-
-class Trial(TrialBase):
+class Trial(SQLModel, table=True):
 
     linked_files: dict[str, str] = (
         {}
@@ -84,35 +74,45 @@ class Trial(TrialBase):
             return []
             
         sequences = []
-        event_sequence = [(event.context, event.label) for event in self.events]
-        
+        event_pairs = [(event.context, event.label) for event in self.events]
+        n_events = len(self.events)
+        seq_len = len(seq)
         if strict:
             # For strict mode, check consecutive sequences
-            for start in range(len(event_sequence) - len(seq) + 1):
-                if event_sequence[start:start + len(seq)] == seq:
-                    matched_events = self.events[start:start + len(seq)]
+            for start in range(n_events - seq_len + 1):
+                if event_pairs[start:start + seq_len] == seq:
+                    matched_events = self.events[start:start + seq_len]
                     sequences.append(matched_events)
                     if not repeat:
                         break
         else:
-            # For non-strict mode, allow gaps between sequence elements
-            for start in range(len(event_sequence)):
+            search_limit = n_events - seq_len
+            start_index = 0
+            while start_index <= search_limit:
                 matched_events = []
-                seq_idx = 0
-                
-                for i in range(start, len(event_sequence)):
-                    if seq_idx >= len(seq):
+                first_event_found_at = -1
+                for i in range(start_index, search_limit+1):
+                    if event_pairs[i] == seq[0]:
+                        matched_events.append(self.events[i])
+                        first_event_found_at = i
+                        break 
+                else:
+                    break
+
+                seq_idx = 1
+                for i in range(first_event_found_at + 1, n_events):
+                    if (n_events - i) < (seq_len - seq_idx):
                         break
                     
-                    if event_sequence[i] == seq[seq_idx]:
+                    if seq_idx < seq_len and event_pairs[i] == seq[seq_idx]:
                         matched_events.append(self.events[i])
                         seq_idx += 1
-                
-                if seq_idx == len(seq):  # Found complete sequence
+
+                if len(matched_events) == seq_len:
                     sequences.append(matched_events)
                     if not repeat:
-                        break
-
+                        return sequences
+                start_index = first_event_found_at + 1
         return sequences
 
     # Factory methods for creating Trial instances
