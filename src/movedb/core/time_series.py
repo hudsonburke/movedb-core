@@ -12,7 +12,7 @@ from pydantic import AfterValidator, BaseModel, model_validator
 
 from movedb.utils import get_c3d_param
 
-# TODO: Consolidate data from Analogs and Points so that can share common functionality
+# TODO: Consolidate data from Analogs and Points so that can share common functionality -> maybe switch to composition instead of inheritance?
 class TimeSeriesGroup(BaseModel):
     first_frame: int
     last_frame: int

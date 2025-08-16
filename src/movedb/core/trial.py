@@ -1,11 +1,8 @@
-import os
 import pickle
-import warnings
 from typing import Any, Type, TypeVar
 
 import ezc3d
 import numpy as np
-import polars as pl
 from pydantic import BaseModel, model_validator
 
 from movedb.utils.ezc3d_helpers import get_c3d_param
@@ -25,17 +22,12 @@ class TrialBase(BaseModel):
 
     name: str
     session_name: str = ""
-    subject_names: list[str] | str = ""
+    subject_names: list[str] = []
     classification: str = ""
 
 
 class Trial(TrialBase):
 
-    # Trial Metadata
-    name: str
-    session_name: str = ""
-    subject_names: list[str] | str = ""
-    classification: str = ""
     linked_files: dict[str, str] = (
         {}
     )  # Map of associated files, e.g. C3D file path, etc.
@@ -44,7 +36,6 @@ class Trial(TrialBase):
     events: list[Event] = []  # Should be in ascending order by frame or time
 
     points: Points
-    point_gaps: dict[str, list[tuple[int, int]]] = {}
 
     analogs: Analogs
     force_platforms: list[EZForcePlatform] = []  # List of force platforms, if any
