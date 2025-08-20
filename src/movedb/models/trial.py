@@ -1,23 +1,20 @@
-from typing import Any
-import numpy as np
 from .events import Event
 from .markers import Marker
 from .analogs import Analog
 from .hierarchy import Session
-from datetime import datetime
 from .forceplates import ForcePlate
 from sqlmodel import SQLModel, Field, Relationship
 from pydantic import model_validator
+from datetime import datetime
 
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default="", index=True)
     session_id: int | None = Field(default=None, foreign_key="session.id")
     session: Session = Relationship(back_populates="trials")
-    start_timestamp: datetime = Field(default_factory=datetime.now)
+    start_timestamp: datetime | None = Field(default_factory=datetime.now)
     # Map of associated files, e.g. C3D file path, etc.
     linked_files: dict[str, str] = {}
-    parameters: dict[str, Any] = {}
 
     events: list[Event] = Relationship(back_populates="trial")
     markers: list [Marker] = Relationship(back_populates="trial")

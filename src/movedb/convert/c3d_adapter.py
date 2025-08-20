@@ -1,5 +1,5 @@
-from typing import Any
 import ezc3d
+from typing import Any
 import numpy as np
 import polars as pl
 from ..models import (
@@ -296,8 +296,8 @@ class C3DAdapter(BaseModel):
             Trial instance populated with data from the C3D file
         """
         return Trial(
-            markers=self.get_all_markers(),
+            events=self.get_all_events(),
+            markers=self.get_all_markers().values(),
             analogs=self.get_all_analogs(),
-            forceplates=self.get_all_force_plates(),
-            events=self.get_all_events()
+            forceplates=self.get_all_force_plates()
         )

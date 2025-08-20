@@ -1,6 +1,7 @@
+from sqlalchemy import JSON
 from .trial import Trial
-from sqlmodel import SQLModel, Field, Relationship
-
+from sqlmodel import Column, SQLModel, Field, Relationship
+from typing import Any
 
 class Session(SQLModel, table=True):
     id: int = Field(primary_key=True)
@@ -13,6 +14,7 @@ class Session(SQLModel, table=True):
 class Subject(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True, unique=True)
+    parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     classification_id: int | None = Field(default=None, foreign_key="classification.id")
     classification: "Classification" = Relationship(back_populates="subjects")
