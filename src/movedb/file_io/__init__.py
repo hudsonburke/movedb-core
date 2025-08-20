@@ -9,7 +9,8 @@ from .opensim_exporters import (
     export_external_loads,
     export_mot
 )
-from .opensim_readers import parse_enf_file, sto_to_df
+from .opensim_readers import sto_to_df
+from .vicon_readers import parse_enf_file
 
 __all__ = [
     "export_trc",

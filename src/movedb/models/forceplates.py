@@ -1,6 +1,7 @@
+from movedb.models.trial import Trial
 from .data import DataSource, HypertableData
-from sqlmodel import Field, Relationship, Column, JSON
-from ..shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
+from sqlmodel import Field, Column, JSON, Relationship
+from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
 import numpy as np
 import polars as pl
 
@@ -19,7 +20,9 @@ class ForcePlateData(HypertableData["ForcePlate"], table=True):
     freemoment_z: float
 
 class ForcePlate(DataSource[ForcePlateData], table=True):
-
+    trial_id: int | None = Field(default = None, foreign_key="trial.id")
+    trial: Trial | None = Relationship(back_populates = "forceplates")
+    
     unit_force: str = "N"
     unit_moment: str = "Nm"
     unit_position: str = "m"
@@ -27,6 +30,10 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
     _cal_matrix: dict = Field(sa_column=Column(JSON), alias="cal_matrix")
     _corners: dict = Field(sa_column=Column(JSON), alias="corners")
     _origin: dict = Field(sa_column=Column(JSON), alias="origin")
+
+    @property
+    def _data_model(self) -> type[ForcePlateData]:
+        return ForcePlateData
 
     @property
     def cal_matrix(self) -> CalMatrixArray:
