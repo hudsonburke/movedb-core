@@ -1,32 +1,28 @@
 from typing import Any
 import numpy as np
 from .events import Event
-from .force_platforms import EZForcePlatform
-from .time_series import Analogs, Points
-from sqlmodel import SQLModel, Field, Relationship, SQLModel, JSON, Column
-
-class TrialSubjectLink(SQLModel, table=True):
-    trial_id: int | None = Field(default = None, foreign_key="trial.id", primary_key=True)
-    subject_id: int | None = Field(default = None, foreign_key="subject.id", primary_key=True)
-
-class Subject(SQLModel, table=True):
-    id: int | None = Field(default = None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    trials: list["Trial"] = Relationship(back_populates="subjects", link_model=TrialSubjectLink)
+from .markers import Marker
+from .analogs import Analog
+from .hierarchy import Session
+from datetime import datetime
+from .forceplates import ForcePlate
+from sqlmodel import SQLModel, Field, Relationship
+from pydantic import model_validator
 
 class Trial(SQLModel, table=True):
-
-    linked_files: dict[str, str] = (
-        {}
-    )  # Map of associated files, e.g. C3D file path, etc.
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(default="", index=True)
+    session_id: int | None = Field(default=None, foreign_key="session.id")
+    session: Session = Relationship(back_populates="trials")
+    start_timestamp: datetime = Field(default_factory=datetime.now)
+    # Map of associated files, e.g. C3D file path, etc.
+    linked_files: dict[str, str] = {}
     parameters: dict[str, Any] = {}
 
-    events: list[Event] = []  # Should be in ascending order by frame or time
-
-    points: Points
-
-    analogs: Analogs
-    force_platforms: list[EZForcePlatform] = []  # List of force platforms, if any
+    events: list[Event] = Relationship(back_populates="trial")
+    markers: list [Marker] = Relationship(back_populates="trial")
+    analogs: list[Analog]= Relationship(back_populates="trial")
+    forceplates: list[ForcePlate] = Relationship(back_populates="trial")
 
     def get_events(self, label: str = "", context: str = "") -> list[Event]:
         """
@@ -40,14 +36,14 @@ class Trial(SQLModel, table=True):
             and (not context or event.context == context)
         ]
         
-    @model_validator(mode="after")
+    @model_validator(mode="after") # TODO: Switch to SQL ordering methodology
     def order_events(self) -> "Trial":
         """
         Ensure events are in ascending order by frame or time.
         """
         self.events = sorted(
             self.events,
-            key=lambda e: (e.get_frame(self.points.rate), e.get_time(self.points.rate)),
+            key=lambda e: (e.get_frame(self.markers[0].rate), e.get_time(self.markers[0].rate)),
         )
         return self
 
