@@ -1,5 +1,5 @@
 from sqlmodel import Field, Relationship
-from .data import HypertableData, DataSource
+from .data_models import HypertableData, DataSource
 from .trial import Trial
 from typing import Type
 

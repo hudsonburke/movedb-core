@@ -1,5 +1,5 @@
 from movedb.models.trial import Trial
-from .data import DataSource, HypertableData
+from .data_models import DataSource, HypertableData
 from sqlmodel import Field, Column, JSON, Relationship
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
 import numpy as np
