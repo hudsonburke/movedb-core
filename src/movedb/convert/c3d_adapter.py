@@ -1,8 +1,7 @@
 import ezc3d
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 import numpy as np
-import polars as pl
 from ..models import (
     Event, 
     Analog,
@@ -152,6 +151,7 @@ class C3DAdapter(BaseModel):
             corners = fp.get("corners", np.zeros((4, 3))),
             origin = fp.get("origin", np.zeros(3)),
             first_frame=self.c3d.header["points"]["first_frame"],
+            last_frame=self.c3d.header["points"]["last_frame"],
             rate=rate,
             data=data_dict
         )
@@ -180,7 +180,7 @@ class C3DAdapter(BaseModel):
         timestamps = np.arange(n_frames) / rate
 
         data_dict = {
-            "timestamp": timestamps,
+            "timestamp": [timedelta(seconds=t) for t in timestamps],
             "x": self.c3d.data["points"][0, index, :],
             "y": self.c3d.data["points"][1, index, :],
             "z": self.c3d.data["points"][2, index, :],
@@ -188,6 +188,7 @@ class C3DAdapter(BaseModel):
         }
 
         marker = Marker(
+            name=self.get_param("POINT", "LABELS", index=index, default=""),
             description=self.get_param("POINT", "DESCRIPTIONS", index=index, default=""),
             units=self.get_param("POINT", "UNITS", index=0, default="m"),
             rate=rate,
@@ -216,28 +217,29 @@ class C3DAdapter(BaseModel):
             
         # Get timestamps based on the analog frame rate
         n_frames = self.c3d.data["analogs"].shape[2]
-        rate = self.get_param("ANALOG", "RATE", default=0.0)
+        rate = self.get_param("ANALOG", "RATE", default=1.0)
         timestamps = np.arange(n_frames) / rate
         
         data_dict = {
-            "timestamp": timestamps,
+            "timestamp": [timedelta(seconds=t) for t in timestamps],
             "value": self.c3d.data["analogs"][0, index, :]
         }
         
         analog = Analog(
+            name=self.get_param("ANALOG", "LABELS", index=index, default=""),
             units=self.get_param("ANALOG", "UNITS", index=index, default="V"),
             scale=self.get_param("ANALOG", "SCALE", index=index, default=1.0),
             offset=self.get_param("ANALOG", "OFFSET", index=index, default=0.0),
             description=self.get_param("ANALOG", "DESCRIPTIONS", index=index, default=""),
-            rate=rate,
             first_frame=self.c3d.header["analogs"]["first_frame"],
             last_frame=self.c3d.header["analogs"]["last_frame"],
+            rate=rate,
             data = data_dict
         )
         
         return analog
 
-    def get_all_markers(self) -> dict[str, Marker]:
+    def get_all_markers(self) -> list[Marker]:
         """
         Extract all markers from C3D file.
         
@@ -245,12 +247,12 @@ class C3DAdapter(BaseModel):
             Dictionary mapping marker labels to Marker instances
         """
         labels = self.get_param("POINT", "LABELS", default=[])
-        return {
-            label: self.get_marker(index=i)
-            for i, label in enumerate(labels)
-        }
+        return [
+            self.get_marker(index=i)
+            for i in range(len(labels))
+        ]
 
-    def get_all_analogs(self) -> dict[str, Analog]:
+    def get_all_analogs(self) -> list[Analog]:
         """
         Extract all analog channels from C3D file.
         
@@ -258,10 +260,10 @@ class C3DAdapter(BaseModel):
             Dictionary mapping channel labels to Analog instances
         """
         labels = self.get_param("ANALOG", "LABELS", default=[])
-        return {
-            label: self.get_analog(index=i)
-            for i, label in enumerate(labels)
-        }
+        return [
+            self.get_analog(index=i)
+            for i in range(len(labels))
+        ]
 
     def get_all_force_plates(self) -> list[ForcePlate]:
         """
@@ -270,9 +272,6 @@ class C3DAdapter(BaseModel):
         Returns:
             List of ForcePlate instances
         """
-        if "platform" not in self.c3d.data:
-            return []
-            
         return [
             self.get_force_plate(index=i)
             for i in range(len(self.c3d.data["platform"]))
@@ -285,9 +284,6 @@ class C3DAdapter(BaseModel):
         Returns:
             List of Event instances
         """
-        if "EVENT" not in self.c3d.parameters:
-            return []
-            
         n_events = len(self.get_param("EVENT", "LABELS", default=[]))
         return [
             self.get_event(index=i)
@@ -301,17 +297,9 @@ class C3DAdapter(BaseModel):
         Returns:
             Trial instance populated with data from the C3D file
         """
-        # Header
-        # Parameters
-        ## Point
-        ## Analog
-        ## Force platform
-        # Point data
-        # Analog data
-        # Force plate data
-
-
         return Trial(
             events=self.get_all_events(),
+            markers=self.get_all_markers(),
+            analogs=self.get_all_analogs(),
             forceplates=self.get_all_force_plates()
         )

@@ -1,14 +1,14 @@
 from sqlmodel import Field, Relationship
 from .trial import Trial
-from .data import DataSource, HypertableData
+from .data_models import DataSource, HypertableData
 from typing import Type
+from functools import cached_property
 
 class MarkerData(HypertableData["Marker"], table=True):
     x: float
     y: float
     z: float
     residual: float
-
 
 class Marker(DataSource[MarkerData], table=True):
     trial_id: int | None = Field(default = None, foreign_key="trial.id")
@@ -20,9 +20,10 @@ class Marker(DataSource[MarkerData], table=True):
     def _data_model(self) -> Type[MarkerData]:
         return MarkerData
 
-    def _get_data_records(self) -> list[dict]:
+    @cached_property
+    def _data_records(self) -> list[dict]:
         return [
             {"timestamp": d.timestamp, "x": d.x, "y": d.y, "z": d.z, "residual": d.residual}
-            for d in self.data
+            for d in self._data
         ]
 

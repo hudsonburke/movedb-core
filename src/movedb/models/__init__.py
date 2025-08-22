@@ -2,10 +2,10 @@
 from .events import Event
 from .analogs import Analog, AnalogData
 from .markers import Marker, MarkerData
-from .data import DataSource, HypertableData
+from .data_models import DataSource, HypertableData
 from .trial import Trial
 from .forceplates import ForcePlate, ForcePlateData
-from .hierarchy import Session, Subject, Classification
+from .hierarchy import CaptureSession, Subject, Classification
 from .files import File
 from .osim import OpenSimModel, OpenSimAnalysis, OpenSimIKSetup, OpenSimIDSetup
 
@@ -18,7 +18,7 @@ __all__ = [
     "ForcePlate",
     "ForcePlateData",
     "Trial",
-    "Session",
+    "CaptureSession",
     "Subject",
     "Classification",
     "File",

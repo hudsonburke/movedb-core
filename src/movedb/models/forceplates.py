@@ -2,8 +2,10 @@ from movedb.models.trial import Trial
 from .data_models import DataSource, HypertableData
 from sqlmodel import Field, Column, JSON, Relationship
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
+from typing import Any
 import numpy as np
 import polars as pl
+from functools import cached_property
 
 class ForcePlateData(HypertableData["ForcePlate"], table=True):
     force_x: float
@@ -59,7 +61,8 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
     def origin(self, v: OriginArray): 
         self._origin = {"data": v.tolist()}
 
-    def _get_data_records(self) -> list[dict]:
+    @cached_property
+    def _data_records(self) -> list[dict]:
         """Implementation of the abstract method from DataSource."""
         return [
             {
@@ -69,27 +72,29 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
                 "cop_x": d.cop_x, "cop_y": d.cop_y, "cop_z": d.cop_z,
                 "freemoment_x": d.freemoment_x, "freemoment_y": d.freemoment_y, "freemoment_z": d.freemoment_z
             }
-            for d in self.data
+            for d in self._data
         ]
+    
+    # TODO: Do this without polars
     @property
     def timestamp(self) -> np.ndarray:
-        return self.to_polars().select("timestamp").to_numpy()
+        return self.to_polars.select("timestamp").to_numpy()
 
     @property
     def force(self) -> np.ndarray:
-        return self.to_polars().select(["force_x", "force_y", "force_z"]).to_numpy()
-    
+        return self.to_polars.select(["force_x", "force_y", "force_z"]).to_numpy()
+
     @property
     def moment(self) -> np.ndarray:
-        return self.to_polars().select(["moment_x", "moment_y", "moment_z"]).to_numpy()
+        return self.to_polars.select(["moment_x", "moment_y", "moment_z"]).to_numpy()
     
     @property
     def cop(self) -> np.ndarray:
-        return self.to_polars().select(["cop_x", "cop_y", "cop_z"]).to_numpy()
+        return self.to_polars.select(["cop_x", "cop_y", "cop_z"]).to_numpy()
     
     @property
     def freemoment(self) -> np.ndarray:
-        return self.to_polars().select(["freemoment_x", "freemoment_y", "freemoment_z"]).to_numpy()
+        return self.to_polars.select(["freemoment_x", "freemoment_y", "freemoment_z"]).to_numpy()
 
     def rotate(self, rotation: Matrix3x3) -> "ForcePlate":
         # Apply rotation to corners and origin 

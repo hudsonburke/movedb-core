@@ -2,6 +2,7 @@ from sqlmodel import Field, Relationship
 from .data_models import HypertableData, DataSource
 from .trial import Trial
 from typing import Type
+from functools import cached_property
 
 class AnalogData(HypertableData["Analog"], table=True):
     value: float
@@ -18,8 +19,9 @@ class Analog(DataSource[AnalogData], table=True):
     def _data_model(self) -> Type["AnalogData"]:
         return AnalogData
 
-    def _get_data_records(self) -> list[dict]:
+    @cached_property
+    def _data_records(self) -> list[dict]:
         return [
             {"timestamp": d.timestamp, "value": (d.value * self.scale + self.offset)}
-            for d in self.data
+            for d in self._data
         ]

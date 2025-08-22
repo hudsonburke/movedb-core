@@ -7,6 +7,7 @@ from typing import Type, cast, Any
 from abc import ABC, abstractmethod
 import polars as pl
 import pandas as pd
+from functools import cached_property
 
 class HypertableData[ParentT](SQLModel):
     timestamp: timedelta = Field(
@@ -24,14 +25,13 @@ class HypertableData[ParentT](SQLModel):
 
 class DataSource[T](SQLModel, ABC):
     id: int | None = Field(default=None, primary_key=True)
-    name: str | None = Field(default=None, index=True)
+    name: str = Field(default=None, index=True, unique=True)
     description: str = ""
     rate: float
     first_frame: int
     last_frame: int | None = None
 
     _data: list[T] = cast(list[T], Relationship(back_populates="parent"))
-
     data: Any = Field(default=None, exclude=True)
 
     @property
@@ -82,20 +82,25 @@ class DataSource[T](SQLModel, ABC):
 
     def set_data(self, data: Any) -> None:
         self._data = self.convert_data(data, self)
+        del self._data_records
+        del self.to_polars
+        del self.to_pandas
 
+    @cached_property
     @abstractmethod
-    def _get_data_records(self) -> list[dict]:
+    def _data_records(self) -> list[dict]:
         raise NotImplementedError
 
+    @cached_property
     def to_pandas(self) -> pd.DataFrame:
-        records = self._get_data_records()
+        records = self._data_records
         if not records:
             return pd.DataFrame()
         return pd.DataFrame.from_records(records).set_index('timestamp')
 
-    # TODO: Could be a cached_property? -> assumes immutability
+    @cached_property
     def to_polars(self) -> pl.DataFrame:
-        records = self._get_data_records()
+        records = self._data_records
         if not records:
             return pl.DataFrame()
         return pl.from_records(records)

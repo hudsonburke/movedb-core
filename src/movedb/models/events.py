@@ -40,15 +40,15 @@ class Event(SQLModel, table=True):
     def get_frame(self, rate: float | None) -> int:
         if self.frame is not None:
             return self.frame
-        if self.time is not None and rate > 0:
-            return int(self.time * rate)
+        if self.time is not None and rate is not None and rate > 0:
+            return int(self.time.seconds * rate)
         # This should not happen if validate_frames_or_times is called first
         raise ValueError("Cannot compute frame without rate or time.")
 
-    def get_time(self, rate: float | None) -> float:
+    def get_time(self, rate: float | None) -> timedelta:
         if self.time is not None:
             return self.time
-        if self.frame is not None and rate > 0:
-            return self.frame / rate
+        if self.frame is not None and rate is not None and rate > 0:
+            return timedelta(seconds=self.frame / rate)
         # This should not happen if validate_frames_or_times is called first
         raise ValueError("Cannot compute time without rate or frame.")

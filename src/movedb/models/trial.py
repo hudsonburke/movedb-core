@@ -1,25 +1,57 @@
 from .events import Event
 from .markers import Marker
 from .analogs import Analog
-from .hierarchy import Session
+from .hierarchy import CaptureSession
 from .forceplates import ForcePlate
+from .data_models import DataSource
 from sqlmodel import SQLModel, Field, Relationship
-from pydantic import model_validator
 from datetime import datetime
+from typing import TypeVar, Any
+
+T = TypeVar("T", bound=DataSource)
 
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default="", index=True)
     session_id: int | None = Field(default=None, foreign_key="session.id")
-    session: Session = Relationship(back_populates="trials")
+    session: CaptureSession = Relationship(back_populates="trials")
     start_timestamp: datetime | None = Field(default_factory=datetime.now)
-    # Map of associated files, e.g. C3D file path, etc.
-    linked_files: dict[str, str] = {}
 
     events: list[Event] = Relationship(back_populates="trial")
-    markers: list [Marker] = Relationship(back_populates="trial")
-    analogs: list[Analog]= Relationship(back_populates="trial")
+
+    markers: list[Marker] = Relationship(back_populates="trial")
+    analogs: list[Analog] = Relationship(back_populates="trial")
     forceplates: list[ForcePlate] = Relationship(back_populates="trial")
+
+    # Private cache storage - excluded from database
+    _marker_cache: dict[str, Marker] = Field(default_factory=dict, exclude=True)
+    _analog_cache: dict[str, Analog] = Field(default_factory=dict, exclude=True)
+    _forceplate_cache: dict[str, ForcePlate] = Field(default_factory=dict, exclude=True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Clear specific cache when corresponding attribute changes
+        if name == "markers":
+            self._marker_cache = {}
+        elif name == "analogs":
+            self._analog_cache = {}
+        elif name == "forceplates":
+            self._forceplate_cache = {}
+        super().__setattr__(name, value)
+
+    def get_marker(self, name: str) -> Marker | None:
+        if not self._marker_cache:
+            self._marker_cache = {marker.name: marker for marker in self.markers}
+        return self._marker_cache.get(name)
+
+    def get_analog(self, name: str) -> Analog | None:
+        if not self._analog_cache:
+            self._analog_cache = {analog.name: analog for analog in self.analogs}
+        return self._analog_cache.get(name)
+
+    def get_forceplate(self, name: str) -> ForcePlate | None:
+        if not self._forceplate_cache:
+            self._forceplate_cache = {fp.name: fp for fp in self.forceplates}
+        return self._forceplate_cache.get(name)
 
     def get_events(self, label: str = "", context: str = "") -> list[Event]:
         """
@@ -32,17 +64,6 @@ class Trial(SQLModel, table=True):
             if (not label or event.label == label)
             and (not context or event.context == context)
         ]
-        
-    @model_validator(mode="after") # TODO: Switch to SQL ordering methodology
-    def order_events(self) -> "Trial":
-        """
-        Ensure events are in ascending order by frame or time.
-        """
-        self.events = sorted(
-            self.events,
-            key=lambda e: (e.get_frame(self.markers[0].rate), e.get_time(self.markers[0].rate)),
-        )
-        return self
 
     def get_event_sequences(self, seq: list[tuple[str, str]], repeat: bool = False, strict: bool = False) -> list[list[Event]]:
         """
