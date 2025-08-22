@@ -22,6 +22,6 @@ class Analog(DataSource[AnalogData], table=True):
     @cached_property
     def _data_records(self) -> list[dict]:
         return [
-            {"timestamp": d.timestamp, "value": (d.value * self.scale + self.offset)}
+            {"timestamp": d.timestamp, "value": (d.value - self.offset) * self.scale} # C3D Documentation p.73 
             for d in self._data
         ]
