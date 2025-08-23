@@ -2,10 +2,8 @@ from movedb.models.trial import Trial
 from .data_models import DataSource, HypertableData
 from sqlmodel import Field, Column, JSON, Relationship
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
-from typing import Any
 import numpy as np
 import polars as pl
-from functools import cached_property
 
 class ForcePlateData(HypertableData["ForcePlate"], table=True):
     force_x: float
@@ -34,10 +32,6 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
     _origin: dict = Field(sa_column=Column(JSON), alias="origin")
 
     @property
-    def _data_model(self) -> type[ForcePlateData]:
-        return ForcePlateData
-
-    @property
     def cal_matrix(self) -> CalMatrixArray:
         return np.array(self._cal_matrix.get('data', []))
 
@@ -61,20 +55,6 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
     def origin(self, v: OriginArray): 
         self._origin = {"data": v.tolist()}
 
-    @cached_property
-    def _data_records(self) -> list[dict]:
-        """Implementation of the abstract method from DataSource."""
-        return [
-            {
-                "timestamp": d.timestamp,
-                "force_x": d.force_x, "force_y": d.force_y, "force_z": d.force_z,
-                "moment_x": d.moment_x, "moment_y": d.moment_y, "moment_z": d.moment_z,
-                "cop_x": d.cop_x, "cop_y": d.cop_y, "cop_z": d.cop_z,
-                "freemoment_x": d.freemoment_x, "freemoment_y": d.freemoment_y, "freemoment_z": d.freemoment_z
-            }
-            for d in self._data
-        ]
-    
     # TODO: Do this without polars
     @property
     def timestamp(self) -> np.ndarray:

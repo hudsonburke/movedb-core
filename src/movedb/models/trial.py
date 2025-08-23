@@ -3,12 +3,9 @@ from .markers import Marker
 from .analogs import Analog
 from .hierarchy import CaptureSession
 from .forceplates import ForcePlate
-from .data_models import DataSource
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
-from typing import TypeVar, Any
-
-T = TypeVar("T", bound=DataSource)
+from typing import Any
 
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)

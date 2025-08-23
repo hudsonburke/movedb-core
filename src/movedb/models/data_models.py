@@ -4,26 +4,25 @@ from sqlmodel import SQLModel, Field
 from pydantic import model_validator
 from datetime import timedelta
 from typing import Type, cast, Any
-from abc import ABC, abstractmethod
 import polars as pl
 import pandas as pd
 from functools import cached_property
 
-class HypertableData[ParentT](SQLModel):
+class HypertableData[ParentT: "DataSource"](SQLModel):
     timestamp: timedelta = Field(
         sa_column=Column(Interval, primary_key=True, nullable=False)
     )
 
     @declared_attr
     def parent_id(cls) -> Mapped[int]:
-        parent_table_name = cls.__name__.lower().replace("data", "")
+        parent_table_name = ParentT.__name__.lower()
         return MappedColumn(Integer, ForeignKey(f"{parent_table_name}.id"), primary_key=True)
 
     @declared_attr
     def parent(cls) -> Mapped[ParentT]:
         return Relationship(back_populates="data")
 
-class DataSource[T](SQLModel, ABC):
+class DataSource[T: HypertableData](SQLModel):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default=None, index=True, unique=True)
     description: str = ""
@@ -35,9 +34,10 @@ class DataSource[T](SQLModel, ABC):
     data: Any = Field(default=None, exclude=True)
 
     @property
-    @abstractmethod
     def _data_model(self) -> Type[T]:
-        raise NotImplementedError
+        if self._data:
+            return self._data[0].__class__
+        raise ValueError("No data available to determine the data model type.")
 
     @classmethod # TODO: Better type hint for data
     def convert_data(cls, data: Any, instance: "DataSource[T]") -> list[T]:
@@ -87,9 +87,11 @@ class DataSource[T](SQLModel, ABC):
         del self.to_pandas
 
     @cached_property
-    @abstractmethod
     def _data_records(self) -> list[dict]:
-        raise NotImplementedError
+        return [
+            d.model_dump(exclude={'parent', 'parent_id'})
+            for d in self._data
+        ]
 
     @cached_property
     def to_pandas(self) -> pd.DataFrame:

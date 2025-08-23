@@ -1,7 +1,6 @@
 from sqlmodel import Field, Relationship
 from .data_models import HypertableData, DataSource
 from .trial import Trial
-from typing import Type
 from functools import cached_property
 
 class AnalogData(HypertableData["Analog"], table=True):
@@ -15,11 +14,7 @@ class Analog(DataSource[AnalogData], table=True):
     scale: float = 1.0
     offset: float = 0.0
 
-    @property
-    def _data_model(self) -> Type["AnalogData"]:
-        return AnalogData
-
-    @cached_property
+    @cached_property # Overrides DataSource._data_records to apply scaling and offset
     def _data_records(self) -> list[dict]:
         return [
             {"timestamp": d.timestamp, "value": (d.value - self.offset) * self.scale} # C3D Documentation p.73 
