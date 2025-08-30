@@ -1,7 +1,6 @@
 from sqlmodel import Field, Relationship
 from .trial import Trial
 from .data_models import DataSource, HypertableData
-from functools import cached_property
 
 class MarkerData(HypertableData["Marker"], table=True):
     x: float

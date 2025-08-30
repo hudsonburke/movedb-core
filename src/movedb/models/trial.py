@@ -1,7 +1,8 @@
 from .events import Event
 from .markers import Marker
 from .analogs import Analog
-from .hierarchy import CaptureSession
+from .hierarchy import CaptureSession, Subject, TrialSubjectLink
+from .groups import TrialGroup, TrialGroupLink
 from .forceplates import ForcePlate
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
@@ -10,9 +11,12 @@ from typing import Any
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default="", index=True)
-    session_id: int | None = Field(default=None, foreign_key="session.id")
-    session: CaptureSession = Relationship(back_populates="trials")
-    start_timestamp: datetime | None = Field(default_factory=datetime.now)
+
+    capture_session_id: int | None = Field(default=None, foreign_key="capture_session.id")
+    capture_session: CaptureSession | None = Relationship(back_populates="trials")
+    subjects: list[Subject] = Relationship(back_populates="trials", link_model=TrialSubjectLink)
+    groups: list[TrialGroup] = Relationship(back_populates="trials", link_model=TrialGroupLink)
+    timestamp: datetime | None = None
 
     events: list[Event] = Relationship(back_populates="trial")
 

@@ -1,28 +1,46 @@
 from sqlalchemy import JSON
 from .trial import Trial
-from sqlmodel import Column, SQLModel, Field, Relationship
+from .groups import CaptureSessionGroupLink, CaptureSessionGroup, SubjectGroupLink, SubjectGroup
+from sqlmodel import Column, SQLModel, Field, Relationship, UniqueConstraint
 from typing import Any
+from datetime import datetime
 
+# TODO: Abstract Group and GroupLink 
 class CaptureSession(SQLModel, table=True):
-    id: int = Field(primary_key=True)
-    name: str
-    parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    id: int | None = Field(default = None, primary_key=True)
+    name: str = Field(index=True)
+    created_at: datetime | None = None
+
+    subject_parameters: list["SubjectSessionParameters"] = Relationship(back_populates="capture_session")
+    trials: list[Trial] = Relationship(back_populates="session")
+    groups: list["CaptureSessionGroup"] = Relationship(back_populates="capture_sessions", link_model=CaptureSessionGroupLink)
+
+class SubjectSessionParameters(SQLModel, table=True): # TODO: Could be inheritable to define specific parameter sets
+    __table_args__ = (
+        UniqueConstraint("subject_id", "capture_session_id", name="unique_subject_session"),
+    )
+    id: int | None = Field(default = None, primary_key=True)
 
     subject_id: int | None = Field(default=None, foreign_key="subject.id")
-    subject: "Subject" = Relationship(back_populates="sessions")
-    trials: list[Trial] = Relationship(back_populates="session")
+    subject: "Subject" = Relationship(back_populates="session_parameters") 
+    
+    capture_session_id: int | None = Field(default=None, foreign_key="capture_session.id")
+    capture_session: CaptureSession = Relationship(back_populates="subject")
+
+    parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+
+class TrialSubjectLink(SQLModel, table=True):
+    trial_id: int | None= Field(
+        default=None, foreign_key="trial.id", primary_key=True
+    )
+    subject_id: int | None = Field(
+        default=None, foreign_key="subject.id", primary_key=True
+    )
 
 class Subject(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
-    name: str = Field(index=True, unique=True)
+    name: str = Field(index=True)
 
-    classification_id: int | None = Field(default=None, foreign_key="classification.id")
-    classification: "Classification" = Relationship(back_populates="subjects")
-    sessions: list[CaptureSession] = Relationship(back_populates="subject")
-
-class Classification(SQLModel, table=True):
-    id: int = Field(primary_key=True)
-    name: str
-    description: str
-
-    subjects: list[Subject] = Relationship(back_populates="classification")
+    session_parameters: list[SubjectSessionParameters] = Relationship(back_populates="subject")
+    trials: list["Trial"] = Relationship(back_populates="subjects", link_model=TrialSubjectLink)
+    groups: list["SubjectGroup"] = Relationship(back_populates="subjects", link_model=SubjectGroupLink)

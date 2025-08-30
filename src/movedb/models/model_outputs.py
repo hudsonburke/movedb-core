@@ -1,5 +1,4 @@
 from .data_models import HypertableData, DataSource
-from functools import cached_property
 
 class AngleData(HypertableData["Angle"], table=True):
     angle: float

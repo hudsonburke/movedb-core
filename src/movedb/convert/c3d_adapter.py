@@ -1,5 +1,5 @@
 import ezc3d
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 import numpy as np
 from ..models import (
@@ -7,7 +7,9 @@ from ..models import (
     Analog,
     Marker,
     ForcePlate,
-    Trial
+    Trial,
+    CaptureSession,
+    Subject
 )
 from pydantic import BaseModel
 
@@ -50,7 +52,7 @@ class C3DAdapter(BaseModel):
             return value[index]
         return value if value is not None else default
 
-    def get_event(self, index: int = 0) -> Event:
+    def get_event(self, trial: Trial, index: int = 0) -> Event:
         """
         Extract event data from C3D file.
 
@@ -81,6 +83,7 @@ class C3DAdapter(BaseModel):
         description = self.get_param("EVENT", "DESCRIPTIONS", index=index, default="")
 
         return Event(
+            trial=trial,
             context=context,
             label=label,
             time=timedelta(
@@ -90,7 +93,7 @@ class C3DAdapter(BaseModel):
             description=description
         )
 
-    def get_force_plate(self, index: int = 0) -> ForcePlate:
+    def get_force_plate(self, trial: Trial, index: int = 0) -> ForcePlate:
         """
         Extract force plate data from C3D file.
 
@@ -144,6 +147,7 @@ class C3DAdapter(BaseModel):
         }
 
         fp_model = ForcePlate(
+            trial=trial,
             unit_force=fp.get("unit_force", "N"),
             unit_moment=fp.get("unit_moment", "Nm"),
             unit_position=fp.get("unit_position", "m"),
@@ -158,7 +162,7 @@ class C3DAdapter(BaseModel):
 
         return fp_model
 
-    def get_marker(self, index: int = 0) -> Marker:
+    def get_marker(self, trial: Trial, index: int = 0) -> Marker:
         """
         Extract marker data from C3D file.
 
@@ -188,6 +192,7 @@ class C3DAdapter(BaseModel):
         }
 
         marker = Marker(
+            trial=trial,
             name=self.get_param("POINT", "LABELS", index=index, default=""),
             description=self.get_param("POINT", "DESCRIPTIONS", index=index, default=""),
             units=self.get_param("POINT", "UNITS", index=0, default="m"),
@@ -199,7 +204,7 @@ class C3DAdapter(BaseModel):
         
         return marker
 
-    def get_analog(self, index: int = 0) -> Analog:
+    def get_analog(self, trial: Trial, index: int = 0) -> Analog:
         """
         Extract analog channel data from C3D file.
         
@@ -226,6 +231,7 @@ class C3DAdapter(BaseModel):
         }
         
         analog = Analog(
+            trial=trial,
             name=self.get_param("ANALOG", "LABELS", index=index, default=""),
             units=self.get_param("ANALOG", "UNITS", index=index, default="V"),
             scale=self.get_param("ANALOG", "SCALE", index=index, default=1.0),
@@ -234,12 +240,12 @@ class C3DAdapter(BaseModel):
             first_frame=self.c3d.header["analogs"]["first_frame"],
             last_frame=self.c3d.header["analogs"]["last_frame"],
             rate=rate,
-            data = data_dict
+            data=data_dict
         )
         
         return analog
 
-    def get_all_markers(self) -> list[Marker]:
+    def get_all_markers(self, trial: Trial) -> list[Marker]:
         """
         Extract all markers from C3D file.
         
@@ -248,11 +254,11 @@ class C3DAdapter(BaseModel):
         """
         labels = self.get_param("POINT", "LABELS", default=[])
         return [
-            self.get_marker(index=i)
+            self.get_marker(trial=trial, index=i)
             for i in range(len(labels))
         ]
 
-    def get_all_analogs(self) -> list[Analog]:
+    def get_all_analogs(self, trial: Trial) -> list[Analog]:
         """
         Extract all analog channels from C3D file.
         
@@ -261,11 +267,11 @@ class C3DAdapter(BaseModel):
         """
         labels = self.get_param("ANALOG", "LABELS", default=[])
         return [
-            self.get_analog(index=i)
+            self.get_analog(trial=trial, index=i)
             for i in range(len(labels))
         ]
 
-    def get_all_force_plates(self) -> list[ForcePlate]:
+    def get_all_force_plates(self, trial: Trial) -> list[ForcePlate]:
         """
         Extract all force plates from C3D file.
         
@@ -273,11 +279,11 @@ class C3DAdapter(BaseModel):
             List of ForcePlate instances
         """
         return [
-            self.get_force_plate(index=i)
+            self.get_force_plate(trial=trial, index=i)
             for i in range(len(self.c3d.data["platform"]))
         ]
 
-    def get_all_events(self) -> list[Event]:
+    def get_all_events(self, trial: Trial) -> list[Event]:
         """
         Extract all events from C3D file.
         
@@ -286,20 +292,32 @@ class C3DAdapter(BaseModel):
         """
         n_events = len(self.get_param("EVENT", "LABELS", default=[]))
         return [
-            self.get_event(index=i)
+            self.get_event(trial=trial, index=i)
             for i in range(n_events)
         ]
 
-    def to_trial(self) -> Trial:
+    def to_trial(self, 
+                 name: str = '', 
+                 timestamp: datetime | None = None,
+                 capture_session: CaptureSession | None = None,
+                 subjects: list[Subject] = []
+                 ) -> Trial:
         """
         Convert the C3D data to a Trial instance.
         
         Returns:
             Trial instance populated with data from the C3D file
         """
-        return Trial(
-            events=self.get_all_events(),
-            markers=self.get_all_markers(),
-            analogs=self.get_all_analogs(),
-            forceplates=self.get_all_force_plates()
+        trial = Trial(
+            name=name,
+            timestamp=timestamp,
+            capture_session=capture_session,
+            subjects=subjects
         )
+
+        trial.events = self.get_all_events(trial=trial)
+        trial.markers = self.get_all_markers(trial=trial)
+        trial.analogs = self.get_all_analogs(trial=trial)
+        trial.forceplates = self.get_all_force_plates(trial=trial)
+
+        return trial
