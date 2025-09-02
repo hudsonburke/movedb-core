@@ -1,6 +1,9 @@
 from sqlmodel import SQLModel, Field, Relationship
-from .hierarchy import CaptureSession, Subject
-from .trial import Trial
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from .trial import Trial
+    from .hierarchy import CaptureSession, Subject
 
 class CaptureSessionGroupLink(SQLModel, table=True):
     capture_session_id: int | None = Field(
@@ -14,7 +17,7 @@ class CaptureSessionGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    capture_sessions: list[CaptureSession] = Relationship(back_populates="groups", link_model=CaptureSessionGroupLink)
+    capture_sessions: list["CaptureSession"] = Relationship(back_populates="groups", link_model="CaptureSessionGroupLink")
     
 class SubjectGroupLink(SQLModel, table=True):
     subject_id: int | None = Field(
@@ -28,7 +31,7 @@ class SubjectGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    subjects: list[Subject] = Relationship(back_populates="groups", link_model=SubjectGroupLink)
+    subjects: list["Subject"] = Relationship(back_populates="groups", link_model="SubjectGroupLink")
 
 class TrialGroupLink(SQLModel, table=True):
     trial_id: int | None= Field(
@@ -42,4 +45,4 @@ class TrialGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    trials: list[Trial] = Relationship(back_populates="groups")
+    trials: list["Trial"] = Relationship(back_populates="groups")

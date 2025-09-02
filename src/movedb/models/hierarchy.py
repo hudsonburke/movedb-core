@@ -1,9 +1,11 @@
 from sqlalchemy import JSON
-from .trial import Trial
 from .groups import CaptureSessionGroupLink, CaptureSessionGroup, SubjectGroupLink, SubjectGroup
 from sqlmodel import Column, SQLModel, Field, Relationship, UniqueConstraint
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from .trial import Trial
 
 # TODO: Abstract Group and GroupLink 
 class CaptureSession(SQLModel, table=True):
@@ -12,7 +14,7 @@ class CaptureSession(SQLModel, table=True):
     created_at: datetime | None = None
 
     subject_parameters: list["SubjectSessionParameters"] = Relationship(back_populates="capture_session")
-    trials: list[Trial] = Relationship(back_populates="session")
+    trials: list["Trial"] = Relationship(back_populates="session")
     groups: list["CaptureSessionGroup"] = Relationship(back_populates="capture_sessions", link_model=CaptureSessionGroupLink)
 
 class SubjectSessionParameters(SQLModel, table=True): # TODO: Could be inheritable to define specific parameter sets

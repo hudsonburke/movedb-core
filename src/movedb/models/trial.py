@@ -1,13 +1,15 @@
 from .events import Event
-from .markers import Marker
-from .analogs import Analog
 from .hierarchy import CaptureSession, Subject, TrialSubjectLink
 from .groups import TrialGroup, TrialGroupLink
-from .forceplates import ForcePlate
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, JSON
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .markers import Marker
+    from .analogs import Analog
+    from .forceplates import ForcePlate
 
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -22,14 +24,14 @@ class Trial(SQLModel, table=True):
 
     events: list[Event] = Relationship(back_populates="trial")
 
-    markers: list[Marker] = Relationship(back_populates="trial")
-    analogs: list[Analog] = Relationship(back_populates="trial")
-    forceplates: list[ForcePlate] = Relationship(back_populates="trial")
+    markers: list["Marker"] = Relationship(back_populates="trial")
+    analogs: list["Analog"] = Relationship(back_populates="trial")
+    forceplates: list["ForcePlate"] = Relationship(back_populates="trial")
 
     # Private cache storage - excluded from database
-    _marker_cache: dict[str, Marker] = Field(default_factory=dict, exclude=True)
-    _analog_cache: dict[str, Analog] = Field(default_factory=dict, exclude=True)
-    _forceplate_cache: dict[str, ForcePlate] = Field(default_factory=dict, exclude=True)
+    _marker_cache: dict[str, "Marker"] = Field(default_factory=dict, exclude=True)
+    _analog_cache: dict[str, "Analog"] = Field(default_factory=dict, exclude=True)
+    _forceplate_cache: dict[str, "ForcePlate"] = Field(default_factory=dict, exclude=True)
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Clear specific cache when corresponding attribute changes
@@ -41,17 +43,17 @@ class Trial(SQLModel, table=True):
             self._forceplate_cache = {}
         super().__setattr__(name, value)
 
-    def get_marker(self, name: str) -> Marker | None:
+    def get_marker(self, name: str) -> "Marker" | None:
         if not self._marker_cache:
             self._marker_cache = {marker.name: marker for marker in self.markers}
         return self._marker_cache.get(name)
 
-    def get_analog(self, name: str) -> Analog | None:
+    def get_analog(self, name: str) -> "Analog" | None:
         if not self._analog_cache:
             self._analog_cache = {analog.name: analog for analog in self.analogs}
         return self._analog_cache.get(name)
 
-    def get_forceplate(self, name: str) -> ForcePlate | None:
+    def get_forceplate(self, name: str) -> "ForcePlate" | None:
         if not self._forceplate_cache:
             self._forceplate_cache = {fp.name: fp for fp in self.forceplates}
         return self._forceplate_cache.get(name)

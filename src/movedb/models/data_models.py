@@ -1,28 +1,47 @@
 from sqlalchemy import ForeignKey, Column, Integer, Interval
-from sqlalchemy.orm import declared_attr, Mapped, MappedColumn, Relationship
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
 from pydantic import model_validator
 from datetime import timedelta
-from typing import Type, cast, Any
+from typing import Type, cast, Any, TYPE_CHECKING, Protocol
 import polars as pl
 import pandas as pd
 from functools import cached_property
+from abc import ABC, abstractmethod
 
-class TimeSeriesData[ParentT: "DataSource"](SQLModel):
+if TYPE_CHECKING:
+    from .trial import Trial
+
+class TimeSeriesData[ParentT: "DataSource"](SQLModel, ABC):
+    """Abstract base class for time series data."""
+    
+    class Config:
+        # This is an abstract base class, don't create a table
+        table = False
+    
     timestamp: timedelta = Field(
         sa_column=Column(Interval, primary_key=True, nullable=False)
     )
 
-    @declared_attr
-    def parent_id(cls) -> Mapped[int]:
-        parent_table_name = ParentT.__name__.lower()
-        return MappedColumn(Integer, ForeignKey(f"{parent_table_name}.id"), primary_key=True)
+    # Abstract properties that concrete subclasses must implement
+    @property
+    @abstractmethod
+    def parent_id(self) -> int:
+        """Return the parent ID for this time series data."""
+        pass
+    
+    @property
+    @abstractmethod
+    def parent(self) -> ParentT:
+        """Return the parent object for this time series data."""
+        pass
 
-    @declared_attr
-    def parent(cls) -> Mapped[ParentT]:
-        return Relationship(back_populates="data")
-
-class DataSource[T: TimeSeriesData](SQLModel):
+class DataSource[T: TimeSeriesData](SQLModel, ABC):
+    """Abstract base class for data sources."""
+    
+    class Config:
+        # This is an abstract base class, don't create a table
+        table = False
+    
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default=None, index=True, unique=True)
     description: str = ""
@@ -30,8 +49,17 @@ class DataSource[T: TimeSeriesData](SQLModel):
     first_frame: int
     last_frame: int | None = None
 
-    _data: list[T] = cast(list[T], Relationship(back_populates="parent"))
-    data: Any = Field(default=None, exclude=True)
+    # Abstract property that concrete subclasses must implement
+    @property
+    @abstractmethod
+    def _data(self) -> list[T]:
+        """Return the list of time series data."""
+        pass
+    
+    @property
+    def data(self) -> Any:
+        """Access to the data property (excluded from database)."""
+        return None
 
     @property
     def _data_model(self) -> Type[T]:

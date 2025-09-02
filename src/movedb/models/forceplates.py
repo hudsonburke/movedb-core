@@ -1,11 +1,21 @@
-from movedb.models.trial import Trial
 from .data_models import DataSource, TimeSeriesData
 from sqlmodel import Field, Column, JSON, Relationship
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
+from typing import TYPE_CHECKING
 import numpy as np
 import polars as pl
 
+if TYPE_CHECKING:
+    from .trial import Trial
+
 class ForcePlateData(TimeSeriesData["ForcePlate"], table=True):
+    """Concrete implementation of TimeSeriesData for force plate data."""
+    
+    # Database fields
+    parent_id: int = Field(foreign_key="forceplate.id", primary_key=True)
+    parent: "ForcePlate" = Relationship(back_populates="data")
+    
+    # Data fields
     force_x: float
     force_y: float
     force_z: float
@@ -21,11 +31,14 @@ class ForcePlateData(TimeSeriesData["ForcePlate"], table=True):
 
 class ForcePlate(DataSource[ForcePlateData], table=True):
     trial_id: int | None = Field(default = None, foreign_key="trial.id")
-    trial: Trial | None = Relationship(back_populates = "forceplates")
+    trial: "Trial" = Relationship(back_populates = "forceplates")
     
     unit_force: str = "N"
     unit_moment: str = "Nm"
     unit_position: str = "m"
+    
+    # Relationship to time series data
+    _data: list[ForcePlateData] = Relationship(back_populates="parent")
 
     _cal_matrix: dict = Field(sa_column=Column(JSON), alias="cal_matrix")
     _corners: dict = Field(sa_column=Column(JSON), alias="corners")

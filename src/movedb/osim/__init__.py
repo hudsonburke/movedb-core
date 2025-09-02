@@ -16,7 +16,8 @@ from .write import (
     export_trc,
     export_mot,
     export_external_loads,
-    export_force_platforms
+    export_force_platforms,
+    OpenSimExternalForce,
 )
 from .read import sto_to_df, sto_to_numpy
 from .id import opensim_id
@@ -29,6 +30,7 @@ __all__ = [
     'export_mot',
     'export_external_loads',
     'export_force_platforms',
+    'OpenSimExternalForce',
     'sto_to_df',
     'sto_to_numpy',
     'opensim_id',
