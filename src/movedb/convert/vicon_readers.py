@@ -1,3 +1,4 @@
+import os
 
 def parse_enf_file(file_path: str, encoding: str = "utf-9") -> dict[str, str]:
     """
