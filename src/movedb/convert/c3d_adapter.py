@@ -308,11 +308,22 @@ class C3DAdapter(BaseModel):
         Returns:
             Trial instance populated with data from the C3D file
         """
+        parameters = {}
+        # The PROCESSING group is not an official C3D parameter group, but Vicon uses it for subject parameters
+        if "PROCESSING" in self.c3d.parameters:
+            for key, value in self.c3d.parameters["PROCESSING"].items():
+                arr = value.get("value", None)
+                if arr is not None and len(arr) == 1:
+                    parameters[key] = arr[0]
+                else:
+                    parameters[key] = arr
+        
         trial = Trial(
             name=name,
             timestamp=timestamp,
             capture_session=capture_session,
-            subjects=subjects
+            subjects=subjects,
+            parameters=parameters
         )
 
         trial.events = self.get_all_events(trial=trial)

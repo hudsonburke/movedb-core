@@ -5,6 +5,7 @@ from .hierarchy import CaptureSession, Subject, TrialSubjectLink
 from .groups import TrialGroup, TrialGroupLink
 from .forceplates import ForcePlate
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, JSON
 from datetime import datetime
 from typing import Any
 
@@ -17,6 +18,7 @@ class Trial(SQLModel, table=True):
     subjects: list[Subject] = Relationship(back_populates="trials", link_model=TrialSubjectLink)
     groups: list[TrialGroup] = Relationship(back_populates="trials", link_model=TrialGroupLink)
     timestamp: datetime | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     events: list[Event] = Relationship(back_populates="trial")
 

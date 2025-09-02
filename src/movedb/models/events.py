@@ -1,9 +1,12 @@
 """Event data structures for biomechanical trials."""
-from .trial import Trial
+from typing import TYPE_CHECKING
 from pydantic import model_validator
 from sqlmodel import SQLModel, Field, Relationship
 from datetime import timedelta
 from sqlalchemy import Column, Interval
+
+if TYPE_CHECKING:
+    from .trial import Trial
 
 class Event(SQLModel, table=True):
     """
@@ -14,7 +17,7 @@ class Event(SQLModel, table=True):
     """
     id: int | None = Field(default=None, primary_key=True)
     trial_id: int | None = Field(default=None, foreign_key="trial.id")
-    trial: Trial = Relationship(back_populates="events")
+    trial: "Trial" = Relationship(back_populates="events")
 
     context: str
     label: str
@@ -37,7 +40,7 @@ class Event(SQLModel, table=True):
             raise ValueError("Only one of 'frame' or 'time' may be provided, not both")
         return self
 
-    def get_frame(self, rate: float | None) -> int:
+    def get_frame(self, rate: float | None = None) -> int:
         if self.frame is not None:
             return self.frame
         if self.time is not None and rate is not None and rate > 0:
@@ -45,7 +48,7 @@ class Event(SQLModel, table=True):
         # This should not happen if validate_frames_or_times is called first
         raise ValueError("Cannot compute frame without rate or time.")
 
-    def get_time(self, rate: float | None) -> timedelta:
+    def get_time(self, rate: float | None = None) -> timedelta:
         if self.time is not None:
             return self.time
         if self.frame is not None and rate is not None and rate > 0:

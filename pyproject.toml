@@ -59,7 +59,9 @@ dev = [
     "anaconda-client"
 ]
 opensim = [
-    # Note: opensim must be installed via conda: conda install -c opensim-org opensim
+    # OpenSim integration dependencies
+    "loguru>=0.7.0",
+    # Note: opensim must be installed via conda: conda install -c conda-forge opensim
     # OpenSim requires Python 3.7-3.12 (not compatible with Python 3.13+)
 ]
 docs = [
@@ -71,6 +73,23 @@ notebooks = [
     "jupyter",
     "matplotlib",
     "seaborn",
+]
+
+# All dependencies including OpenSim
+all = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "sqlmodel>=0.0.14",
+    "psycopg2-binary>=2.9.0",
+    "python-multipart>=0.0.6",
+    "requests>=2.31.0",
+    "loguru>=0.7.0",
+    "jupyter",
+    "matplotlib",
+    "seaborn",
+    "sphinx>=4.0",
+    "sphinx-rtd-theme",
+    "myst-parser",
 ]
 
 [project.urls]
