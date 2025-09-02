@@ -1,11 +1,11 @@
 from movedb.models.trial import Trial
-from .data_models import DataSource, HypertableData
+from .data_models import DataSource, TimeSeriesData
 from sqlmodel import Field, Column, JSON, Relationship
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
 import numpy as np
 import polars as pl
 
-class ForcePlateData(HypertableData["ForcePlate"], table=True):
+class ForcePlateData(TimeSeriesData["ForcePlate"], table=True):
     force_x: float
     force_y: float
     force_z: float

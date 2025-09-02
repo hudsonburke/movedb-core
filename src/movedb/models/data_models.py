@@ -8,7 +8,7 @@ import polars as pl
 import pandas as pd
 from functools import cached_property
 
-class HypertableData[ParentT: "DataSource"](SQLModel):
+class TimeSeriesData[ParentT: "DataSource"](SQLModel):
     timestamp: timedelta = Field(
         sa_column=Column(Interval, primary_key=True, nullable=False)
     )
@@ -22,7 +22,7 @@ class HypertableData[ParentT: "DataSource"](SQLModel):
     def parent(cls) -> Mapped[ParentT]:
         return Relationship(back_populates="data")
 
-class DataSource[T: HypertableData](SQLModel):
+class DataSource[T: TimeSeriesData](SQLModel):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default=None, index=True, unique=True)
     description: str = ""

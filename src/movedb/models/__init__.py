@@ -2,7 +2,7 @@
 from .events import Event
 from .analogs import Analog, AnalogData
 from .markers import Marker, MarkerData
-from .data_models import DataSource, HypertableData
+from .data_models import DataSource, TimeSeriesData
 from .trial import Trial
 from .forceplates import ForcePlate, ForcePlateData
 from .hierarchy import CaptureSession, Subject, TrialGroup
@@ -22,5 +22,5 @@ __all__ = [
     "TrialGroup",
     "File",
     "DataSource",
-    "HypertableData",
+    "TimeSeriesData",
 ]

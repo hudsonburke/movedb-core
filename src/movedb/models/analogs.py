@@ -1,9 +1,9 @@
 from sqlmodel import Field, Relationship
-from .data_models import HypertableData, DataSource
+from .data_models import TimeSeriesData, DataSource
 from .trial import Trial
 from functools import cached_property
 
-class AnalogData(HypertableData["Analog"], table=True):
+class AnalogData(TimeSeriesData["Analog"], table=True):
     value: float
 
 class Analog(DataSource[AnalogData], table=True):

@@ -1,13 +1,13 @@
-from .data_models import HypertableData, DataSource
+from .data_models import TimeSeriesData, DataSource
 
-class AngleData(HypertableData["Angle"], table=True):
+class AngleData(TimeSeriesData["Angle"], table=True):
     angle: float
 
 class Angle(DataSource[AngleData]):
     units: str = "degrees"
 
 
-class MomentData(HypertableData["Moment"], table=True):
+class MomentData(TimeSeriesData["Moment"], table=True):
     moment: float
 
 class Moment(DataSource[MomentData]):

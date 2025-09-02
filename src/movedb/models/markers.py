@@ -1,8 +1,8 @@
 from sqlmodel import Field, Relationship
 from .trial import Trial
-from .data_models import DataSource, HypertableData
+from .data_models import DataSource, TimeSeriesData
 
-class MarkerData(HypertableData["Marker"], table=True):
+class MarkerData(TimeSeriesData["Marker"], table=True):
     x: float
     y: float
     z: float
