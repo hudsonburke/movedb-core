@@ -1,136 +1,130 @@
-from sqlalchemy import ForeignKey, Column, Integer, Interval
-from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Interval
+from sqlalchemy.orm import declared_attr, Mapped, mapped_column
+from sqlmodel import Column, SQLModel, Field
 from pydantic import model_validator
 from datetime import timedelta
-from typing import Type, cast, Any, TYPE_CHECKING, Protocol
+from typing import Type, Any, Protocol, TypeVar, Generic
 import polars as pl
 import pandas as pd
 from functools import cached_property
-from abc import ABC, abstractmethod
 
-if TYPE_CHECKING:
-    from .trial import Trial
 
-class TimeSeriesData[ParentT: "DataSource"](SQLModel, ABC):
-    """Abstract base class for time series data."""
+class TimeSeriesData(SQLModel):
+    """Abstract base class for time series data. 
     
-    class Config:
-        # This is an abstract base class, don't create a table
-        table = False
-    
-    timestamp: timedelta = Field(
-        sa_column=Column(Interval, primary_key=True, nullable=False)
-    )
+    Concrete subclasses should define:
+    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
+    """
+    pass
 
-    # Abstract properties that concrete subclasses must implement
-    @property
-    @abstractmethod
-    def parent_id(self) -> int:
-        """Return the parent ID for this time series data."""
-        pass
-    
-    @property
-    @abstractmethod
-    def parent(self) -> ParentT:
-        """Return the parent object for this time series data."""
-        pass
 
-class DataSource[T: TimeSeriesData](SQLModel, ABC):
+class DataSource(SQLModel, table=True):
     """Abstract base class for data sources."""
-    
-    class Config:
-        # This is an abstract base class, don't create a table
-        table = False
     
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default=None, index=True, unique=True)
     description: str = ""
-    rate: float
+    rate: float = Field(description="The rate of the data in Hz")
     first_frame: int
     last_frame: int | None = None
-
-    # Abstract property that concrete subclasses must implement
-    @property
-    @abstractmethod
-    def _data(self) -> list[T]:
-        """Return the list of time series data."""
-        pass
     
-    @property
-    def data(self) -> Any:
-        """Access to the data property (excluded from database)."""
-        return None
+    type: str | None  = Field(default=None, index=True)  # discriminator
 
-    @property
-    def _data_model(self) -> Type[T]:
-        if self._data:
-            return self._data[0].__class__
-        raise ValueError("No data available to determine the data model type.")
+    __mapper_args__ = {
+        "polymorphic_on": "type",
+        "polymorphic_identity": "base",
+    }
+    
+    def _invalidate_caches(self):
+        """Invalidate cached properties."""
+        for attr in ("_data_records", "to_polars", "to_pandas"):
+            if attr in self.__dict__:
+                del self.__dict__[attr]
 
-    @classmethod # TODO: Better type hint for data
-    def convert_data(cls, data: Any, instance: "DataSource[T]") -> list[T]:
-        """
-        Converts various data formats into a list of dictionaries.
-        """
-        data_model = instance._data_model
-        match data:
-            case pl.DataFrame():
-                return [data_model(**row) for row in data.to_dicts()]
-            case pd.DataFrame():
-                if data.index.name == 'timestamp':
-                    data = data.reset_index()
-                return [data_model(**{str(k): v for k, v in row.items()}) 
-                        for row in data.to_dict(orient='records')]
-            case list() if all(isinstance(item, data_model) for item in data):
-                return data
-            case list() if all(isinstance(item, dict) for item in data):
-                return [data_model(**item) for item in data]
-            case None:
-                return []
-            case _:
-                raise TypeError(
-                    f"Unsupported data type: {type(data).__name__}. "
-                    "Must be a polars/pandas DataFrame, a list of dicts, "
-                    "or a list of {data_model.__name__} instances."
-                )
+    @classmethod
+    def _get_data_model(cls) -> Type[TimeSeriesData]:
+        raise NotImplementedError(f"{cls.__name__} must define the _get_data_model method")
 
+    # --- Data Loading and Conversion ---
     @model_validator(mode='before')
     @classmethod
     def _validate_and_set_data(cls, values: dict[str, Any]) -> dict[str, Any]:
-        """
-        Catches the 'data' field during initialization, converts it to model
-        instances, and assigns it to the '_data' relationship field.
-        """
-        if data_in := values.get("data"):
-            concrete_class_instance = cls(**{k: v for k, v in values.items() if k != 'data'})
-            values["_data"] = cls.convert_data(data_in, concrete_class_instance)
-            # Remove the temporary 'data' field so SQLModel doesn't see it
-            del values["data"]
+        # Accept explicit presence of the `data` key even when it's an empty list or None
+        if "data" in values:
+            data_in = values.pop("data")
+            data_model = cls._get_data_model()
+            values["data"] = cls._convert_data_statically(data_in, data_model)
         return values
 
-    def set_data(self, data: Any) -> None:
-        self._data = self.convert_data(data, self)
-        del self._data_records
-        del self.to_polars
-        del self.to_pandas
+    @classmethod
+    def _convert_data_statically(cls, data: Any, data_model: Type[TimeSeriesData]) -> list[TimeSeriesData]:
+        # Accept polars/pandas DataFrame, list of models, list of dicts, or None
+        if data is None:
+            return []
 
+        if isinstance(data, pl.DataFrame):
+            return [data_model(**row) for row in data.to_dicts()]
+
+        if isinstance(data, pd.DataFrame):
+            # If timestamp is the index, move it back to a column so constructor sees it
+            if data.index.name == 'timestamp':
+                data = data.reset_index()
+            return [data_model(**{str(k): v for k, v in row.items()}) for row in data.to_dict(orient='records')]
+
+        if isinstance(data, list):
+            if all(isinstance(item, data_model) for item in data):
+                return data
+            if all(isinstance(item, dict) for item in data):
+                return [data_model(**item) for item in data]
+
+        raise TypeError(f"Unsupported data type: {type(data).__name__}.")
+    # NOTE: child classes should declare a SQLModel/SQLAlchemy relationship
+    # named `data: list[ConcreteData] = Relationship(...)`. We intentionally do
+    # not define a `data` property on the parent class to avoid a name
+    # collision with child class descriptors. Use `set_data(...)` to set
+    # input data (DataFrame/list/dicts) and the post-validator will attach the
+    # converted models to the child's relationship attribute.
+    # TODO: Update this whenever SQLModel merges polymorphism pull requests
+
+    def set_data(self, data: Any) -> "DataSource":
+        """Convenience method to set data and return self for chaining.
+
+        Accepts the same input types as the `data` setter (pandas/polars/DataFrame,
+        list of dicts, list of model instances, or None).
+        """
+        self.data = data
+        # Invalidate cached properties
+        self._invalidate_caches()
+        return self
+ 
     @cached_property
     def _data_records(self) -> list[dict]:
         return [
             d.model_dump(exclude={'parent', 'parent_id'})
-            for d in self._data
+            for d in getattr(self, "data", [])
         ]
 
     @cached_property
     def to_pandas(self) -> pd.DataFrame:
         records = self._data_records
-        if not records:
-            return pd.DataFrame()
-        return pd.DataFrame.from_records(records).set_index('timestamp')
+        return pd.DataFrame.from_records(records).set_index('timestamp') if records else pd.DataFrame()
 
     @cached_property
     def to_polars(self) -> pl.DataFrame:
         records = self._data_records
-        if not records:
-            return pl.DataFrame()
-        return pl.from_records(records)
+        return pl.from_records(records) if records else pl.DataFrame()
+
+DataSourceType = TypeVar("DataSourceType", bound="DataSource")
+TimeSeriesDataType = TypeVar("TimeSeriesDataType", bound="TimeSeriesData")
+
+class TimeSeriesProtocol(Protocol):
+    """Protocol defining the interface for time series data."""
+    timestamp: timedelta
+
+class DataSourceWithData(Protocol, Generic[TimeSeriesDataType]):
+    data: list[TimeSeriesDataType]
+
+class TimeSeriesDataWithParent(Protocol, Generic[DataSourceType]):
+    timestamp: timedelta
+    parent_id: int
+    parent: DataSourceType

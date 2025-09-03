@@ -17,7 +17,7 @@ class CaptureSessionGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    capture_sessions: list["CaptureSession"] = Relationship(back_populates="groups", link_model="CaptureSessionGroupLink")
+    capture_sessions: list["CaptureSession"] = Relationship(back_populates="groups", link_model=CaptureSessionGroupLink)
     
 class SubjectGroupLink(SQLModel, table=True):
     subject_id: int | None = Field(
@@ -31,7 +31,7 @@ class SubjectGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    subjects: list["Subject"] = Relationship(back_populates="groups", link_model="SubjectGroupLink")
+    subjects: list["Subject"] = Relationship(back_populates="groups", link_model=SubjectGroupLink)
 
 class TrialGroupLink(SQLModel, table=True):
     trial_id: int | None= Field(

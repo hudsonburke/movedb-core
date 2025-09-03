@@ -18,6 +18,8 @@ class C3DAdapter(BaseModel):
     Adapter class for converting C3D file data to MoveDB models.
     Handles parameter access, error handling, and data conversion.
     """
+    model_config = {"arbitrary_types_allowed": True}
+    
     c3d: ezc3d.c3d
     
     @classmethod

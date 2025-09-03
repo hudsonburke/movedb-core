@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from .events import Event
 from .hierarchy import CaptureSession, Subject, TrialSubjectLink
 from .groups import TrialGroup, TrialGroupLink
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, JSON
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .markers import Marker
@@ -28,10 +30,12 @@ class Trial(SQLModel, table=True):
     analogs: list["Analog"] = Relationship(back_populates="trial")
     forceplates: list["ForcePlate"] = Relationship(back_populates="trial")
 
-    # Private cache storage - excluded from database
-    _marker_cache: dict[str, "Marker"] = Field(default_factory=dict, exclude=True)
-    _analog_cache: dict[str, "Analog"] = Field(default_factory=dict, exclude=True)
-    _forceplate_cache: dict[str, "ForcePlate"] = Field(default_factory=dict, exclude=True)
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Private cache storage - excluded from database
+        self._marker_cache: dict[str, "Marker"] = {}
+        self._analog_cache: dict[str, "Analog"] = {}
+        self._forceplate_cache: dict[str, "ForcePlate"] = {}
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Clear specific cache when corresponding attribute changes
@@ -43,17 +47,17 @@ class Trial(SQLModel, table=True):
             self._forceplate_cache = {}
         super().__setattr__(name, value)
 
-    def get_marker(self, name: str) -> "Marker" | None:
+    def get_marker(self, name: str) -> Optional["Marker"]:
         if not self._marker_cache:
             self._marker_cache = {marker.name: marker for marker in self.markers}
         return self._marker_cache.get(name)
 
-    def get_analog(self, name: str) -> "Analog" | None:
+    def get_analog(self, name: str) -> Optional["Analog"]:
         if not self._analog_cache:
             self._analog_cache = {analog.name: analog for analog in self.analogs}
         return self._analog_cache.get(name)
 
-    def get_forceplate(self, name: str) -> "ForcePlate" | None:
+    def get_forceplate(self, name: str) -> Optional["ForcePlate"]:
         if not self._forceplate_cache:
             self._forceplate_cache = {fp.name: fp for fp in self.forceplates}
         return self._forceplate_cache.get(name)

@@ -1,12 +1,17 @@
-from sqlmodel import Field, Relationship
-from .data_models import DataSource, TimeSeriesData
-from typing import TYPE_CHECKING
+from sqlmodel import Field, Relationship, Column
+from sqlalchemy import Interval
+from .data_models import TimeSeriesData, DataSource
+from typing import TYPE_CHECKING, Type
+from datetime import timedelta
 
 if TYPE_CHECKING:
     from .trial import Trial
 
-class MarkerData(TimeSeriesData["Marker"], table=True):
+class MarkerData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for marker data."""
+    
+    # Time series fields
+    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
     
     # Database fields
     parent_id: int = Field(foreign_key="marker.id", primary_key=True)
@@ -18,11 +23,9 @@ class MarkerData(TimeSeriesData["Marker"], table=True):
     z: float
     residual: float
     
-    # Abstract methods are satisfied by the field definitions above
-
-class Marker(DataSource[MarkerData], table=True):
+class Marker(DataSource, table=True):
     """Concrete implementation of DataSource for marker data."""
-    
+    __mapper_args__ = {"polymorphic_identity": "marker"}
     # Database fields
     trial_id: int | None = Field(default = None, foreign_key="trial.id")
     trial: "Trial" = Relationship(back_populates="markers")
@@ -31,5 +34,9 @@ class Marker(DataSource[MarkerData], table=True):
     units: str = "m"
     
     # Relationship to time series data
-    _data: list[MarkerData] = Relationship(back_populates="parent")
+    data: list[MarkerData] = Relationship(back_populates="parent")
+
+    @classmethod
+    def _get_data_model(cls) -> Type[MarkerData]:
+        return MarkerData
     

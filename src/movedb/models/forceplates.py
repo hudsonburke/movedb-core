@@ -1,15 +1,20 @@
-from .data_models import DataSource, TimeSeriesData
+from .data_models import TimeSeriesData, DataSource
 from sqlmodel import Field, Column, JSON, Relationship
+from sqlalchemy import Interval
 from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
+from datetime import timedelta
 import numpy as np
 import polars as pl
 
 if TYPE_CHECKING:
     from .trial import Trial
 
-class ForcePlateData(TimeSeriesData["ForcePlate"], table=True):
+class ForcePlateData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for force plate data."""
+    
+    # Time series fields
+    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
     
     # Database fields
     parent_id: int = Field(foreign_key="forceplate.id", primary_key=True)
@@ -29,7 +34,8 @@ class ForcePlateData(TimeSeriesData["ForcePlate"], table=True):
     freemoment_y: float
     freemoment_z: float
 
-class ForcePlate(DataSource[ForcePlateData], table=True):
+class ForcePlate(DataSource, table=True):
+    __mapper_args__ = {"polymorphic_identity": "forceplate"}
     trial_id: int | None = Field(default = None, foreign_key="trial.id")
     trial: "Trial" = Relationship(back_populates = "forceplates")
     
@@ -38,35 +44,39 @@ class ForcePlate(DataSource[ForcePlateData], table=True):
     unit_position: str = "m"
     
     # Relationship to time series data
-    _data: list[ForcePlateData] = Relationship(back_populates="parent")
+    data: list[ForcePlateData] = Relationship(back_populates="parent")
 
-    _cal_matrix: dict = Field(sa_column=Column(JSON), alias="cal_matrix")
-    _corners: dict = Field(sa_column=Column(JSON), alias="corners")
-    _origin: dict = Field(sa_column=Column(JSON), alias="origin")
+    @classmethod
+    def _get_data_model(cls) -> Type[ForcePlateData]:
+        return ForcePlateData
+
+    cal_matrix_data: dict = Field(sa_column=Column(JSON))
+    corners_data: dict = Field(sa_column=Column(JSON))
+    origin_data: dict = Field(sa_column=Column(JSON))
 
     @property
     def cal_matrix(self) -> CalMatrixArray:
-        return np.array(self._cal_matrix.get('data', []))
+        return np.array(self.cal_matrix_data.get('data', []))
 
     @cal_matrix.setter
     def cal_matrix(self, v: CalMatrixArray):
-        self._cal_matrix = {"data": v.tolist()}
+        self.cal_matrix_data = {"data": v.tolist()}
 
     @property
     def corners(self) -> CornersArray:
-        return np.array(self._corners.get('data', []))
+        return np.array(self.corners_data.get('data', []))
 
     @corners.setter
     def corners(self, v: CornersArray): 
-        self._corners = {"data": v.tolist()}
+        self.corners_data = {"data": v.tolist()}
 
     @property
     def origin(self) -> OriginArray:
-        return np.array(self._origin.get('data', []))
+        return np.array(self.origin_data.get('data', []))
     
     @origin.setter
     def origin(self, v: OriginArray): 
-        self._origin = {"data": v.tolist()}
+        self.origin_data = {"data": v.tolist()}
 
     # TODO: Do this without polars
     @property
