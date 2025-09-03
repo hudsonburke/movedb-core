@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import select
-from typing import Any, Optional, Literal
+from typing import Any, Optional, Literal, List, Dict
 import pandas as pd
 import numpy as np
 from ..dependencies import SessionDep
 from ...models import Trial, Marker, Analog, ForcePlate
+from ..services.plotting import BiomechanicalPlotService
 
 router = APIRouter(
     prefix="/analysis",
@@ -288,3 +289,114 @@ def export_trial_data(
                     export_data["forceplates"][forceplate.name] = df.to_dict('records')
     
     return export_data
+
+
+# =================== PLOTTING ENDPOINTS ===================
+
+@router.get("/plots/marker-trajectory-3d/{trial_id}")
+async def get_marker_trajectory_3d(
+    trial_id: int,
+    session: SessionDep,
+    marker_names: Optional[List[str]] = Query(None, description="Specific marker names to plot"),
+    start_time: Optional[float] = Query(None, description="Start time in seconds"),
+    end_time: Optional[float] = Query(None, description="End time in seconds")
+) -> Dict[str, Any]:
+    """Get 3D marker trajectory plot configuration for frontend visualization."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_marker_trajectory_3d(trial_id, marker_names, start_time, end_time)
+
+@router.get("/plots/config")
+async def get_plot_config(session: SessionDep) -> Dict[str, Any]:
+    """Get standard plot configuration for frontend applications."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_custom_plot_config()
+
+
+@router.get("/plots/force-plate-timeseries/{trial_id}")
+async def get_force_plate_timeseries(
+    trial_id: int,
+    session: SessionDep,
+    force_plate_ids: Optional[List[int]] = Query(None, description="Specific force plate IDs"),
+    components: List[str] = Query(['force_x', 'force_y', 'force_z'], description="Force components to plot"),
+    normalize_time: bool = Query(True, description="Normalize time to percentage")
+) -> Dict[str, Any]:
+    """Get force plate time series plot configuration."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_force_plate_timeseries(trial_id, force_plate_ids, components, normalize_time)
+
+
+@router.get("/plots/analog-signals/{trial_id}")
+async def get_analog_signals(
+    trial_id: int,
+    session: SessionDep,
+    analog_names: Optional[List[str]] = Query(None, description="Specific analog channel names"),
+    start_time: Optional[float] = Query(None, description="Start time in seconds"),
+    end_time: Optional[float] = Query(None, description="End time in seconds"),
+    normalize_time: bool = Query(True, description="Normalize time to percentage")
+) -> Dict[str, Any]:
+    """Get analog signals plot configuration."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_analog_signals(trial_id, analog_names, start_time, end_time, normalize_time)
+
+
+@router.get("/plots/gait-analysis/{trial_id}")
+async def get_gait_analysis(
+    trial_id: int,
+    session: SessionDep,
+    marker_name: str = Query("HEEL", description="Marker for gait analysis"),
+    axis: str = Query("z", description="Axis for analysis (x, y, z)"),
+    detect_events: bool = Query(True, description="Detect gait events")
+) -> Dict[str, Any]:
+    """Get gait analysis plot configuration."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_gait_analysis(trial_id, marker_name, axis, detect_events)
+
+
+@router.get("/plots/trial-dashboard/{trial_id}")
+async def get_trial_dashboard(
+    trial_id: int,
+    session: SessionDep
+) -> Dict[str, Any]:
+    """Get trial dashboard plot configuration."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_trial_dashboard(trial_id)
+
+
+@router.get("/plots/3d-trial-visualizer/{trial_id}")
+async def get_3d_trial_visualizer(
+    trial_id: int,
+    session: SessionDep,
+    current_time: float = Query(0.0, description="Current time point in seconds"),
+    time_window: float = Query(0.1, description="Time window around current time"),
+    show_force_plates: bool = Query(True, description="Show force plate outlines"),
+    show_force_vectors: bool = Query(True, description="Show force vectors as arrows"),
+    show_markers: bool = Query(True, description="Show markers as spheres"),
+    show_trajectories: bool = Query(True, description="Show marker trajectory trails"),
+    trajectory_length: float = Query(1.0, description="Length of trajectory trails in seconds"),
+    force_scale: float = Query(0.001, description="Scale factor for force vectors"),
+    marker_size: int = Query(8, description="Size of marker spheres")
+) -> Dict[str, Any]:
+    """Get 3D trial visualizer configuration (Vicon Nexus style)."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_3d_trial_visualizer(
+        trial_id=trial_id,
+        current_time=current_time,
+        time_window=time_window,
+        show_force_plates=show_force_plates,
+        show_force_vectors=show_force_vectors,
+        show_markers=show_markers,
+        show_trajectories=show_trajectories,
+        trajectory_length=trajectory_length,
+        force_scale=force_scale,
+        marker_size=marker_size
+    )
+
+
+@router.get("/plots/trial-time-range/{trial_id}")
+async def get_trial_time_range(
+    trial_id: int,
+    session: SessionDep
+) -> Dict[str, Any]:
+    """Get time range for a trial."""
+    plot_service = BiomechanicalPlotService(session)
+    return plot_service.get_trial_time_range(trial_id)
