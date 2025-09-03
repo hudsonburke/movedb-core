@@ -17,7 +17,7 @@ class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default="", index=True)
 
-    capture_session_id: int | None = Field(default=None, foreign_key="capture_session.id")
+    capture_session_id: int | None = Field(default=None, foreign_key="capturesession.id")
     capture_session: CaptureSession | None = Relationship(back_populates="trials")
     subjects: list[Subject] = Relationship(back_populates="trials", link_model=TrialSubjectLink)
     groups: list[TrialGroup] = Relationship(back_populates="trials", link_model=TrialGroupLink)

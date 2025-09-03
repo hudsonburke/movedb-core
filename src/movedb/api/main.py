@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from .dependencies import create_db_and_tables, get_session
+from .dependencies import create_db_and_tables
 from .config import settings
-from fastcrud import crud_router
-from ..models import Trial
 from .routers.ingest import router as ingest_router
+from .routers.upload import router as upload_router
+from .routers.analysis import router as analysis_router
+from .routers.crud import router as crud_router_v1
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,8 +16,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    description="API for biomechanical motion capture data management and analysis",
     lifespan=lifespan,
 )
+
 if settings.CORS_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
@@ -26,17 +29,26 @@ if settings.CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-trial_router = crud_router(
-    session=Depends(get_session),
-    model=Trial,
-    create_schema=Trial,
-    update_schema=Trial,
-    path="/trials",
-    tags=["trials"],
-)
-app.include_router(trial_router)
+# Include all routers
+app.include_router(crud_router_v1)
 app.include_router(ingest_router)
+app.include_router(upload_router)
+app.include_router(analysis_router)
 
 @app.get("/")
 async def root():
-    return {"message": "Hello there"}
+    return {
+        "message": "Welcome to MoveDB API",
+        "version": settings.VERSION,
+        "docs_url": "/docs",
+        "available_endpoints": {
+            "crud": "/api/v1",
+            "ingest": "/ingest", 
+            "upload": "/upload",
+            "analysis": "/analysis"
+        }
+    }
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "version": settings.VERSION}

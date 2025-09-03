@@ -26,7 +26,7 @@ class SubjectSessionParameters(SQLModel, table=True): # TODO: Could be inheritab
     subject_id: int | None = Field(default=None, foreign_key="subject.id")
     subject: "Subject" = Relationship(back_populates="session_parameters") 
     
-    capture_session_id: int | None = Field(default=None, foreign_key="capture_session.id")
+    capture_session_id: int | None = Field(default=None, foreign_key="capturesession.id")
     capture_session: CaptureSession = Relationship(back_populates="subject")
 
     parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))

@@ -7,10 +7,10 @@ if TYPE_CHECKING:
 
 class CaptureSessionGroupLink(SQLModel, table=True):
     capture_session_id: int | None = Field(
-        default=None, foreign_key="capture_session.id", primary_key=True
+        default=None, foreign_key="capturesession.id", primary_key=True
     )
     group_id: int | None = Field(
-        default=None, foreign_key="group.id", primary_key=True
+        default=None, foreign_key="capturesessiongroup.id", primary_key=True
     )
 
 class CaptureSessionGroup(SQLModel, table=True):
@@ -24,7 +24,7 @@ class SubjectGroupLink(SQLModel, table=True):
         default=None, foreign_key="subject.id", primary_key=True
     )
     group_id: int | None = Field(
-        default=None, foreign_key="group.id", primary_key=True
+        default=None, foreign_key="subjectgroup.id", primary_key=True
     )
 
 class SubjectGroup(SQLModel, table=True):
@@ -38,7 +38,7 @@ class TrialGroupLink(SQLModel, table=True):
         default=None, foreign_key="trial.id", primary_key=True
     )
     group_id: int | None = Field(
-        default=None, foreign_key="group.id", primary_key=True
+        default=None, foreign_key="trialgroup.id", primary_key=True
     )
 
 class TrialGroup(SQLModel, table=True):

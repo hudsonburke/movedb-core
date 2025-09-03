@@ -11,7 +11,7 @@ class AngleData(TimeSeriesData, table=True):
     timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
     
     # Database fields
-    parent_id: int = Field(foreign_key="angle.id", primary_key=True)
+    parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
     parent: "Angle" = Relationship(back_populates="data")
     
     # Data fields
@@ -37,7 +37,7 @@ class MomentData(TimeSeriesData, table=True):
     timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
     
     # Database fields
-    parent_id: int = Field(foreign_key="moment.id", primary_key=True)
+    parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
     parent: "Moment" = Relationship(back_populates="data")
     
     # Data fields

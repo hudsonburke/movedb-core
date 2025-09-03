@@ -15,7 +15,7 @@ class AnalogData(TimeSeriesData, table=True):
     timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
     
     # Database fields
-    parent_id: int = Field(foreign_key="analog.id", primary_key=True)
+    parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
     parent: "Analog" = Relationship(back_populates="data")
     
     # Data fields
