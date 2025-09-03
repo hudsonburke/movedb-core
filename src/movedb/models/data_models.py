@@ -1,6 +1,4 @@
-from sqlalchemy import Interval
-from sqlalchemy.orm import declared_attr, Mapped, mapped_column
-from sqlmodel import Column, SQLModel, Field
+from sqlmodel import SQLModel, Field
 from pydantic import model_validator
 from datetime import timedelta
 from typing import Type, Any, Protocol, TypeVar, Generic
@@ -19,7 +17,16 @@ class TimeSeriesData(SQLModel):
 
 
 class DataSource(SQLModel, table=True):
-    """Abstract base class for data sources."""
+    """Abstract base class for data sources.
+    NOTE: child classes should declare a SQLModel/SQLAlchemy relationship
+    named `data: list[ConcreteData] = Relationship(...)`. We intentionally do
+    not define a `data` property on the parent class to avoid a name
+    collision with child class descriptors. Use `set_data(...)` to set
+    input data (DataFrame/list/dicts) and the post-validator will attach the
+    converted models to the child's relationship attribute.
+    ----
+    TODO: Update this whenever SQLModel merges polymorphism pull requests
+    """
     
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default=None, index=True, unique=True)
@@ -78,15 +85,8 @@ class DataSource(SQLModel, table=True):
                 return [data_model(**item) for item in data]
 
         raise TypeError(f"Unsupported data type: {type(data).__name__}.")
-    # NOTE: child classes should declare a SQLModel/SQLAlchemy relationship
-    # named `data: list[ConcreteData] = Relationship(...)`. We intentionally do
-    # not define a `data` property on the parent class to avoid a name
-    # collision with child class descriptors. Use `set_data(...)` to set
-    # input data (DataFrame/list/dicts) and the post-validator will attach the
-    # converted models to the child's relationship attribute.
-    # TODO: Update this whenever SQLModel merges polymorphism pull requests
 
-    def set_data(self, data: Any) -> "DataSource":
+    def set_data(self, data: Any):
         """Convenience method to set data and return self for chaining.
 
         Accepts the same input types as the `data` setter (pandas/polars/DataFrame,

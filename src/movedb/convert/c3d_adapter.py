@@ -153,14 +153,13 @@ class C3DAdapter(BaseModel):
             unit_force=fp.get("unit_force", "N"),
             unit_moment=fp.get("unit_moment", "Nm"),
             unit_position=fp.get("unit_position", "m"),
-            cal_matrix = fp.get("cal_matrix", np.eye(6)),
-            corners = fp.get("corners", np.zeros((4, 3))),
-            origin = fp.get("origin", np.zeros(3)),
+            cal_matrix_data=fp.get("cal_matrix", np.eye(6)),
+            corners_data=fp.get("corners", np.zeros((4, 3))),
+            origin_data=fp.get("origin", np.zeros(3)),
             first_frame=self.c3d.header["points"]["first_frame"],
             last_frame=self.c3d.header["points"]["last_frame"],
             rate=rate,
-            data=data_dict
-        )
+        ).set_data(data_dict)
 
         return fp_model
 
@@ -201,8 +200,7 @@ class C3DAdapter(BaseModel):
             rate=rate,
             first_frame=self.c3d.header["points"]["first_frame"],
             last_frame=self.c3d.header["points"]["last_frame"],
-            data=data_dict
-        )
+        ).set_data(data_dict)
         
         return marker
 
@@ -242,9 +240,8 @@ class C3DAdapter(BaseModel):
             first_frame=self.c3d.header["analogs"]["first_frame"],
             last_frame=self.c3d.header["analogs"]["last_frame"],
             rate=rate,
-            data=data_dict
-        )
-        
+        ).set_data(data_dict)
+
         return analog
 
     def get_all_markers(self, trial: Trial) -> list[Marker]:
