@@ -5,7 +5,6 @@ from .dependencies import create_db_and_tables
 from .config import settings
 from .routers.ingest import router as ingest_router
 from .routers.upload import router as upload_router
-from .routers.analysis import router as analysis_router
 from .routers.crud import router as crud_router_v1
 
 @asynccontextmanager
@@ -33,7 +32,6 @@ if settings.CORS_ORIGINS:
 app.include_router(crud_router_v1)
 app.include_router(ingest_router)
 app.include_router(upload_router)
-app.include_router(analysis_router)
 
 @app.get("/")
 async def root():

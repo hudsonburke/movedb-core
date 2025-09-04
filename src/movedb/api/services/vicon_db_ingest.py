@@ -3,7 +3,6 @@ from sqlmodel import Session, select
 from ...models import Subject, CaptureSession, Trial
 from ...ingest.vicon_scan import discover_vicon_directory
 
-
 def _ensure_subject(session: Session, subject_name: str) -> Subject:
     subject = session.exec(select(Subject).where(Subject.name == subject_name)).first()
     if subject is None:

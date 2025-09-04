@@ -11,7 +11,6 @@ MoveDB provides tools for:
 
 # Core modules
 from . import models
-from . import convert
 from . import ingest
 from . import plot
 from . import validation
@@ -40,7 +39,6 @@ def has_opensim() -> bool:
 # Main exports
 __all__ = [
     "models",
-    "convert", 
     "ingest",
     "plot",
     "validation",

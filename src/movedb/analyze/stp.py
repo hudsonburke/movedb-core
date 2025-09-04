@@ -1,9 +1,8 @@
 import numpy as np
-
-from ..core import Trial
+from ..models import Trial
 from loguru import logger
-# NOT YET IMPLEMENTED -- Maybe should be part of Trial class?
 
+raise NotImplementedError("Spatiotemporal parameter calculations are not implemented yet.")
 
 # Spatiotemporal parameters  -- Currently following Huxham et al. 2006 for straight line gait
 # TODO: Implement Dingwell 2024 calculations

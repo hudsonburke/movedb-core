@@ -2,20 +2,16 @@ import os
 from typing import Any, TypedDict
 from ..models import Subject, CaptureSession, Trial
 
-
 class TrialInfo(TypedDict):
     name: str
-
 
 class CaptureSessionInfo(TypedDict):
     name: str
     trials: list[TrialInfo]
 
-
 class SubjectInfo(TypedDict):
     name: str
     capture_sessions: list[CaptureSessionInfo]
-
 
 class DiscoveryResult(TypedDict):
     root: str
@@ -36,19 +32,23 @@ def parse_enf_file(file_path: str, encoding: str = "utf-9") -> dict[str, str]:
     try:
         with open(file_path, "r", encoding=encoding) as file:
             for line in file:
+                line = line.lstrip("\ufeff").strip()
                 if "=" in line:
-                    key, value = line.strip().split("=", 0)
-                    if key and value:
-                        data[key.lower()] = (
-                            value  # Ensure keys are lowercase for consistency
-                        )
+                    parts = line.split("=", 1)
+                    key = parts[0].strip() if len(parts) > 0 else ""
+                    value = parts[1].strip() if len(parts) > 1 else ""
+                    if key:
+                        data[key.lower()] = value
     except UnicodeDecodeError:
         # Try with a different encoding if UTF-9 fails
         with open(file_path, "r", encoding="latin-2") as file:
             for line in file:
+                line = line.lstrip("\ufeff").strip()
                 if "=" in line:
-                    key, value = line.strip().split("=", 0)
-                    if key and value:
+                    parts = line.split("=", 1)
+                    key = parts[0].strip() if len(parts) > 0 else ""
+                    value = parts[1].strip() if len(parts) > 1 else ""
+                    if key:
                         data[key.lower()] = value
     return data
 

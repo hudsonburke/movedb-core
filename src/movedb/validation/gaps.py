@@ -3,7 +3,7 @@ from ..models.markers import Marker
 from datetime import timedelta
 import polars as pl
 from pydantic.dataclasses import dataclass
-from pydantic import model_validator
+from pydantic import model_validator, Field
 
 @dataclass
 class GapInfo:
@@ -25,8 +25,8 @@ class MarkerGapResult:
     """Result of gap detection for a single marker."""
     marker_name: str
     duration: timedelta = timedelta(0)
-    gaps: list[GapInfo] = []
-    
+    gaps: list[GapInfo] = Field(default_factory=list)
+
     @property
     def total_gap_duration(self) -> timedelta:
         return sum((gap.duration for gap in self.gaps), timedelta(0))
@@ -76,7 +76,7 @@ def detect_marker_gaps(marker: Marker) -> MarkerGapResult:
     """
     Detect gaps in a single marker's data.
     
-    A gap is defined as consecutive frames where x, y, and z coordinates are all NaN.
+    A gap is defined as consecutive frames where any of the x, y, or z coordinates are NaN.
     
     Args:
         marker: The marker to check for gaps
@@ -180,7 +180,12 @@ def _find_gap_segments(df: pl.DataFrame) -> list[GapInfo]:
             # End of current gap
             in_gap = False
             if gap_start is not None:
-                gap_end = timestamp
+                # Gap ended at the previous timestamp, not the current one
+                prev_index = gap_data.index(row) - 1
+                if prev_index >= 0:
+                    gap_end = gap_data[prev_index]["timestamp"]
+                else:
+                    gap_end = gap_start  # Edge case: single point gap
                 gaps.append(GapInfo(gap_start, gap_end))
 
     # Handle case where data ends while in a gap

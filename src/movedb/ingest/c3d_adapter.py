@@ -45,14 +45,16 @@ class C3DAdapter(BaseModel):
         """
         param: dict = self.c3d.parameters
         for key in keys:
+            if not isinstance(param, dict):
+                return default
             param = param.get(key, {})
-        value = param.get("value", {})
+        value = param.get("value", default)
         
         if index is not None and (isinstance(value, list) or isinstance(value, np.ndarray)):
             if index < 0 or index >= len(value):
                 raise IndexError(f"Index {index} out of range for parameter '{keys}'")
             return value[index]
-        return value if value is not None else default
+        return value 
 
     def get_event(self, trial: Trial, index: int = 0) -> Event:
         """
@@ -75,10 +77,16 @@ class C3DAdapter(BaseModel):
 
         # Get time in seconds from (min, sec) format
         times = self.get_param("EVENT", "TIMES", default=[[None, None]])
-        if times.shape[1] <= index:
-            raise ValueError(f"No time data for event at index {index}")
-
-        time_min, time_sec = times[:, index]
+        if isinstance(times, np.ndarray):
+            if times.ndim < 2 or times.shape[1] <= index:
+                raise ValueError(f"No time data for event at index {index}")
+            time_min, time_sec = times[:, index]
+        else:
+            # Handle list format
+            if not times or len(times) < 2 or len(times[0]) <= index:
+                raise ValueError(f"No time data for event at index {index}")
+            time_min = times[0][index] if len(times[0]) > index else None
+            time_sec = times[1][index] if len(times[1]) > index else None
         if time_min is None or time_sec is None:
             raise ValueError(f"Invalid time data for event at index {index}")
 
@@ -130,6 +138,8 @@ class C3DAdapter(BaseModel):
         free_moment = fp.get("Tz", np.zeros((3, n_frames)))
 
         rate = self.get_param("ANALOG", "RATE", default=0.0)
+        if rate <= 0:
+            raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
 
         data_dict = {
@@ -179,9 +189,10 @@ class C3DAdapter(BaseModel):
         if "points" not in self.c3d.data:
             raise ValueError("C3D object does not contain point data")
 
-        # Get timestamps based on the point frame rate
         n_frames = self.c3d.data["points"].shape[2]
-        rate = self.get_param("POINT", "RATE", default=1.0)
+        rate = self.get_param("POINT", "RATE", default=0.0)
+        if rate <= 0:
+            raise ValueError(f"Invalid POINT rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
 
         data_dict = {
@@ -222,7 +233,9 @@ class C3DAdapter(BaseModel):
             
         # Get timestamps based on the analog frame rate
         n_frames = self.c3d.data["analogs"].shape[2]
-        rate = self.get_param("ANALOG", "RATE", default=1.0)
+        rate = self.get_param("ANALOG", "RATE", default=0.0)
+        if rate <= 0:
+            raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
         
         data_dict = {
@@ -277,6 +290,8 @@ class C3DAdapter(BaseModel):
         Returns:
             List of ForcePlate instances
         """
+        if "platform" not in self.c3d.data:
+            return []
         return [
             self.get_force_plate(trial=trial, index=i)
             for i in range(len(self.c3d.data["platform"]))
@@ -299,7 +314,7 @@ class C3DAdapter(BaseModel):
                  name: str = '', 
                  timestamp: datetime | None = None,
                  capture_session: CaptureSession | None = None,
-                 subjects: list[Subject] = []
+                 subjects: list[Subject] | None = None
                  ) -> Trial:
         """
         Convert the C3D data to a Trial instance.
@@ -307,6 +322,8 @@ class C3DAdapter(BaseModel):
         Returns:
             Trial instance populated with data from the C3D file
         """
+        if subjects is None:
+            subjects = []
         parameters = {}
         # The PROCESSING group is not an official C3D parameter group, but Vicon uses it for subject parameters
         if "PROCESSING" in self.c3d.parameters:
