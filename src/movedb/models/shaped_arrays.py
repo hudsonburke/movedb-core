@@ -1,3 +1,4 @@
+# TODO: Clean up and unify shaped array types
 # from numpydantic import NDArray, Shape
 # from typing import TYPE_CHECKING
 # FloatCol = tuple[float, ...]

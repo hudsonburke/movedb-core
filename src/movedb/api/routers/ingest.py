@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from ..dependencies import SessionDep
 from ..services.vicon_db_ingest import scan_vicon_directory
-from ...convert.c3d_adapter import C3DAdapter
+from ...ingest.c3d_adapter import C3DAdapter
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 

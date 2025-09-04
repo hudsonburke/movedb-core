@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from .events import Event
 from .hierarchy import CaptureSession, Subject, TrialSubjectLink
 from .groups import TrialGroup, TrialGroupLink
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, JSON
 from datetime import datetime
 from typing import Any, TYPE_CHECKING, Optional
+import polars as pl
 
 if TYPE_CHECKING:
+    from .events import Event
     from .markers import Marker
     from .analogs import Analog
     from .forceplates import ForcePlate
@@ -24,7 +25,7 @@ class Trial(SQLModel, table=True):
     timestamp: datetime | None = None
     parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
-    events: list[Event] = Relationship(back_populates="trial")
+    events: list["Event"] = Relationship(back_populates="trial")
 
     markers: list["Marker"] = Relationship(back_populates="trial")
     analogs: list["Analog"] = Relationship(back_populates="trial")
@@ -134,3 +135,109 @@ class Trial(SQLModel, table=True):
                         return sequences
                 start_index = first_event_found_at + 1
         return sequences
+
+    def markers_to_dataframe(self) -> pl.DataFrame:
+        """
+        Convert all trial markers to a combined polars DataFrame.
+        
+        Returns:
+            pl.DataFrame: Combined dataframe with columns:
+                - timestamp: timedelta timestamps
+                - marker_name: string marker identifier
+                - x, y, z: spatial coordinates (float)
+                - residual: marker reconstruction residual (float)
+        """
+        if not self.markers:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Duration,
+                "marker_name": pl.String,
+                "x": pl.Float64,
+                "y": pl.Float64, 
+                "z": pl.Float64,
+                "residual": pl.Float64
+            })
+        
+        marker_dfs = []
+        for marker in self.markers:
+            df = marker.to_polars.with_columns(
+                pl.lit(marker.name).alias("marker_name")
+            ).select([
+                "timestamp", "marker_name", "x", "y", "z", "residual"
+            ])
+            marker_dfs.append(df)
+        
+        return pl.concat(marker_dfs, how="vertical")
+
+    def analogs_to_dataframe(self) -> pl.DataFrame:
+        """
+        Convert all trial analogs to a combined polars DataFrame.
+        
+        Returns:
+            pl.DataFrame: Combined dataframe with columns:
+                - timestamp: timedelta timestamps
+                - analog_name: string analog identifier  
+                - value: scaled analog value (float)
+        """
+        if not self.analogs:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Duration,
+                "analog_name": pl.String,
+                "value": pl.Float64
+            })
+        
+        analog_dfs = []
+        for analog in self.analogs:
+            df = analog.to_polars.with_columns(
+                pl.lit(analog.name).alias("analog_name")
+            ).select([
+                "timestamp", "analog_name", "value"
+            ])
+            analog_dfs.append(df)
+        
+        return pl.concat(analog_dfs, how="vertical")
+
+    def forceplates_to_dataframe(self) -> pl.DataFrame:
+        """
+        Convert all trial force plates to a combined polars DataFrame.
+        
+        Returns:
+            pl.DataFrame: Combined dataframe with columns:
+                - timestamp: timedelta timestamps
+                - forceplate_name: string forceplate identifier
+                - force_x, force_y, force_z: force components (float)
+                - moment_x, moment_y, moment_z: moment components (float)
+                - cop_x, cop_y, cop_z: center of pressure coordinates (float)
+                - freemoment_x, freemoment_y, freemoment_z: free moment components (float)
+        """
+        if not self.forceplates:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Duration,
+                "forceplate_name": pl.String,
+                "force_x": pl.Float64,
+                "force_y": pl.Float64,
+                "force_z": pl.Float64,
+                "moment_x": pl.Float64,
+                "moment_y": pl.Float64,
+                "moment_z": pl.Float64,
+                "cop_x": pl.Float64,
+                "cop_y": pl.Float64,
+                "cop_z": pl.Float64,
+                "freemoment_x": pl.Float64,
+                "freemoment_y": pl.Float64,
+                "freemoment_z": pl.Float64
+            })
+        
+        forceplate_dfs = []
+        for forceplate in self.forceplates:
+            df = forceplate.to_polars.with_columns(
+                pl.lit(forceplate.name).alias("forceplate_name")
+            ).select([
+                "timestamp", "forceplate_name", 
+                "force_x", "force_y", "force_z",
+                "moment_x", "moment_y", "moment_z",
+                "cop_x", "cop_y", "cop_z",
+                "freemoment_x", "freemoment_y", "freemoment_z"
+            ])
+            forceplate_dfs.append(df)
+        
+        return pl.concat(forceplate_dfs, how="vertical")

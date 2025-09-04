@@ -13,8 +13,8 @@ MoveDB provides tools for:
 from . import models
 from . import convert
 from . import ingest
-from . import utils
 from . import plot
+from . import validation
 
 # OpenSim integration
 try:
@@ -42,8 +42,8 @@ __all__ = [
     "models",
     "convert", 
     "ingest",
-    "utils",
     "plot",
+    "validation",
     "osim",
     "has_opensim",
     "__version__",

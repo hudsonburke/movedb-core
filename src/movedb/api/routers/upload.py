@@ -1,11 +1,11 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks
 from typing import Optional
 import os
 import tempfile
 import shutil
 import datetime
 from ..dependencies import SessionDep
-from ...convert.c3d_adapter import C3DAdapter
+from ...ingest.c3d_adapter import C3DAdapter
 from ...models import File as FileModel
 
 router = APIRouter(

@@ -1,7 +1,7 @@
 from .data_models import TimeSeriesData, DataSource
 from sqlmodel import Field, Column, JSON, Relationship
 from sqlalchemy import Interval
-from ..utils.shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
+from .shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
 from typing import TYPE_CHECKING, Type
 from datetime import timedelta
 import numpy as np
