@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlmodel import SQLModel, create_engine, Session
 from .config import settings
+from ..models import *  # Ensure all models are imported for metadata
 
 connect_args = {"check_same_thread": False}
 engine = create_engine(settings.DATABASE_URL, connect_args=connect_args)

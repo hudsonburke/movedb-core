@@ -10,14 +10,11 @@ if TYPE_CHECKING:
 class MarkerData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for marker data."""
     
-    # Time series fields
-    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
+    timestamp: timedelta = Field(primary_key=True)
     
-    # Database fields
-    parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
+    parent_id: int = Field(foreign_key="marker.id", primary_key=True)
     parent: "Marker" = Relationship(back_populates="data")
     
-    # Data fields
     x: float
     y: float
     z: float
@@ -25,15 +22,13 @@ class MarkerData(TimeSeriesData, table=True):
     
 class Marker(DataSource, table=True):
     """Concrete implementation of DataSource for marker data."""
-    __mapper_args__ = {"polymorphic_identity": "marker"}
-    # Database fields
-    trial_id: int | None = Field(default = None, foreign_key="trial.id")
+    id: int | None = Field(default=None, primary_key=True)
+
+    trial_id: int | None = Field(default=None, foreign_key="trial.id")
     trial: "Trial" = Relationship(back_populates="markers")
-    
-    # Data fields
+
     units: str = "m"
     
-    # Relationship to time series data
     data: list[MarkerData] = Relationship(back_populates="parent")
 
     @classmethod

@@ -1,46 +1,58 @@
 from sqlmodel import SQLModel, Field
-from pydantic import model_validator
+from pydantic import model_validator, field_validator
 from datetime import timedelta
-from typing import Type, Any, Protocol, TypeVar, Generic
+from typing import Any
+from abc import ABC, abstractmethod
 import polars as pl
 import pandas as pd
 from functools import cached_property
 
 
-class TimeSeriesData(SQLModel):
-    """Abstract base class for time series data. 
-    
+class TimeSeriesData(ABC, SQLModel):
+    """Abstract base class for time series data.
+
     Concrete subclasses should define:
-    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
+    timestamp: timedelta = Field(primary_key=True)
+    parent_id: int = Field(foreign_key="parent_table.id", primary_key=True)
+    parent: ParentDataSource = Relationship(back_populates="data")
     """
-    pass
+    timestamp: timedelta
+    # NOTE: parent and parent_id must be defined in concrete subclasses
 
-
-class DataSource(SQLModel, table=True):
+class DataSource(ABC, SQLModel):
     """Abstract base class for data sources.
-    NOTE: child classes should declare a SQLModel/SQLAlchemy relationship
-    named `data: list[ConcreteData] = Relationship(...)`. We intentionally do
-    not define a `data` property on the parent class to avoid a name
-    collision with child class descriptors. Use `set_data(...)` to set
-    input data (DataFrame/list/dicts) and the post-validator will attach the
-    converted models to the child's relationship attribute.
-    ----
-    TODO: Update this whenever SQLModel merges polymorphism pull requests
-    """
     
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(default=None, index=True, unique=True)
-    description: str = ""
+    REQUIRED: Concrete subclasses MUST define:
+    - data: list[ConcreteTimeSeriesData] = Relationship(back_populates="parent")
+    - table=True (for SQLModel table creation)
+    - _get_data_model() method returning the data model class
+    
+    Example:
+        class Analog(DataSource, table=True):
+            data: list[AnalogData] = Relationship(back_populates="parent")
+            
+            def _get_data_model(self):
+                return AnalogData
+    """
+    #id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(default="", index=True)
+    description: str = Field(default="")
     rate: float = Field(description="The rate of the data in Hz")
     first_frame: int
     last_frame: int | None = None
-    
-    type: str | None  = Field(default=None, index=True)  # discriminator
+    # NOTE: 'data' and 'data_model' must be defined in concrete subclasses
 
-    __mapper_args__ = {
-        "polymorphic_on": "type",
-        "polymorphic_identity": "base",
-    }
+    @classmethod
+    @abstractmethod
+    def _get_data_model(cls) -> type:
+        """Return the data model class for this data source.
+        
+        This method MUST be implemented by concrete subclasses.
+        
+        Returns:
+            The TimeSeriesData subclass for this data source.
+        """
+        pass
     
     def _invalidate_caches(self):
         """Invalidate cached properties."""
@@ -49,22 +61,7 @@ class DataSource(SQLModel, table=True):
                 del self.__dict__[attr]
 
     @classmethod
-    def _get_data_model(cls) -> Type[TimeSeriesData]:
-        raise NotImplementedError(f"{cls.__name__} must define the _get_data_model method")
-
-    # --- Data Loading and Conversion ---
-    @model_validator(mode='before')
-    @classmethod
-    def _validate_and_set_data(cls, values: dict[str, Any]) -> dict[str, Any]:
-        # Accept explicit presence of the `data` key even when it's an empty list or None
-        if "data" in values:
-            data_in = values.pop("data")
-            data_model = cls._get_data_model()
-            values["data"] = cls._convert_data_statically(data_in, data_model)
-        return values
-
-    @classmethod
-    def _convert_data_statically(cls, data: Any, data_model: Type[TimeSeriesData]) -> list[TimeSeriesData]:
+    def _convert_data_statically(cls, data: Any, data_model: type) -> list:
         # Accept polars/pandas DataFrame, list of models, list of dicts, or None
         if data is None:
             return []
@@ -86,14 +83,33 @@ class DataSource(SQLModel, table=True):
 
         raise TypeError(f"Unsupported data type: {type(data).__name__}.")
 
-    def set_data(self, data: Any):
-        """Convenience method to set data and return self for chaining.
-
-        Accepts the same input types as the `data` setter (pandas/polars/DataFrame,
-        list of dicts, list of model instances, or None).
-        """
-        self.data = data
-        # Invalidate cached properties
+    @model_validator(mode='before')
+    @classmethod
+    def _validate_data(cls, values: Any) -> Any:
+        """Pydantic validator to convert and set data before model instantiation."""
+        # Only process if 'data' is provided and it's not already model instances
+        if not isinstance(values, dict):
+            return values
+        data = values.get('data', None)
+        if data is not None:
+            # Get the data model from the class method
+            data_model = cls._get_data_model()
+            values['data'] = cls._convert_data_statically(data, data_model)
+        return values
+    
+    @field_validator('data', mode='before', check_fields=False)
+    @classmethod
+    def _validate_data_field(cls, data: Any) -> Any:
+        """Pydantic field validator to convert and set data when 'data' is assigned."""
+        if data is not None:
+            data_model = cls._get_data_model()
+            return cls._convert_data_statically(data, data_model)
+        return data
+    
+    def set_data(self, data: Any) -> "DataSource":
+        """Set data from various formats and return self for chaining."""
+        data_model = self._get_data_model()
+        self.data = self._convert_data_statically(data, data_model)
         self._invalidate_caches()
         return self
  
@@ -113,18 +129,3 @@ class DataSource(SQLModel, table=True):
     def to_polars(self) -> pl.DataFrame:
         records = self._data_records
         return pl.from_records(records) if records else pl.DataFrame()
-
-DataSourceType = TypeVar("DataSourceType", bound="DataSource")
-TimeSeriesDataType = TypeVar("TimeSeriesDataType", bound="TimeSeriesData")
-
-class TimeSeriesProtocol(Protocol):
-    """Protocol defining the interface for time series data."""
-    timestamp: timedelta
-
-class DataSourceWithData(Protocol, Generic[TimeSeriesDataType]):
-    data: list[TimeSeriesDataType]
-
-class TimeSeriesDataWithParent(Protocol, Generic[DataSourceType]):
-    timestamp: timedelta
-    parent_id: int
-    parent: DataSourceType

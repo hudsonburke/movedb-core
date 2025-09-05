@@ -1,27 +1,27 @@
-from __future__ import annotations
-
-from .hierarchy import CaptureSession, Subject, TrialSubjectLink
-from .groups import TrialGroup, TrialGroupLink
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, JSON
 from datetime import datetime
 from typing import Any, TYPE_CHECKING, Optional
 import polars as pl
+from .hierarchy import TrialSubjectLink
+from .groups import TrialGroupLink
 
 if TYPE_CHECKING:
     from .events import Event
     from .markers import Marker
     from .analogs import Analog
     from .forceplates import ForcePlate
+    from .hierarchy import CaptureSession, Subject
+    from .groups import TrialGroup
 
 class Trial(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(default="", index=True)
 
     capture_session_id: int | None = Field(default=None, foreign_key="capturesession.id")
-    capture_session: CaptureSession | None = Relationship(back_populates="trials")
-    subjects: list[Subject] = Relationship(back_populates="trials", link_model=TrialSubjectLink)
-    groups: list[TrialGroup] = Relationship(back_populates="trials", link_model=TrialGroupLink)
+    capture_session: Optional["CaptureSession"] = Relationship(back_populates="trials")
+    subjects: list["Subject"] = Relationship(back_populates="trials", link_model=TrialSubjectLink)
+    groups: list["TrialGroup"] = Relationship(back_populates="trials", link_model=TrialGroupLink)
     timestamp: datetime | None = None
     parameters: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
@@ -63,7 +63,7 @@ class Trial(SQLModel, table=True):
             self._forceplate_cache = {fp.name: fp for fp in self.forceplates}
         return self._forceplate_cache.get(name)
 
-    def get_events(self, label: str = "", context: str = "") -> list[Event]:
+    def get_events(self, label: str = "", context: str = "") -> list["Event"]:
         """
         Return a copy of the events list filtered by label and context.
         If label or context is empty, it will not filter by that parameter.
@@ -75,7 +75,7 @@ class Trial(SQLModel, table=True):
             and (not context or event.context == context)
         ]
 
-    def get_event_sequences(self, seq: list[tuple[str, str]], repeat: bool = False, strict: bool = False) -> list[list[Event]]:
+    def get_event_sequences(self, seq: list[tuple[str, str]], repeat: bool = False, strict: bool = False) -> list[list["Event"]]:
         """
         Get sequences of events based on a list of (context, label) tuples.
         

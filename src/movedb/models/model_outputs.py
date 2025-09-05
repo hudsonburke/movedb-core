@@ -6,24 +6,18 @@ from datetime import timedelta
 
 class AngleData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for angle data."""
+    timestamp: timedelta = Field(primary_key=True)
     
-    # Time series fields
-    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
-    
-    # Database fields
     parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
     parent: "Angle" = Relationship(back_populates="data")
     
-    # Data fields
     angle: float
 
 class Angle(DataSource, table=True):
     """Concrete implementation of DataSource for angle data."""
-    __mapper_args__ = {"polymorphic_identity": "angle"}
-    # Data fields
+    id: int | None = Field(default=None, primary_key=True)
     units: str = "degrees"
     
-    # Relationship to time series data
     data: list[AngleData] = Relationship(back_populates="parent")
 
     @classmethod
@@ -32,24 +26,18 @@ class Angle(DataSource, table=True):
 
 class MomentData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for moment data."""
+    timestamp: timedelta = Field(primary_key=True)
     
-    # Time series fields
-    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
-    
-    # Database fields
     parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
     parent: "Moment" = Relationship(back_populates="data")
     
-    # Data fields
     moment: float
 
 class Moment(DataSource, table=True):
     """Concrete implementation of DataSource for moment data."""
-    __mapper_args__ = {"polymorphic_identity": "moment"}
-    # Data fields
+    id: int | None = Field(default=None, primary_key=True)
     units: str = "Nm"
     
-    # Relationship to time series data
     data: list[MomentData] = Relationship(back_populates="parent")
 
     @classmethod

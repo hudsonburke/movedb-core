@@ -1,26 +1,20 @@
 from .data_models import TimeSeriesData, DataSource
 from sqlmodel import Field, Column, JSON, Relationship
-from sqlalchemy import Interval
 from .shaped_arrays import CalMatrixArray, CornersArray, OriginArray, Matrix3x3
 from typing import TYPE_CHECKING, Type
 from datetime import timedelta
 import numpy as np
-import polars as pl
 
 if TYPE_CHECKING:
     from .trial import Trial
 
 class ForcePlateData(TimeSeriesData, table=True):
     """Concrete implementation of TimeSeriesData for force plate data."""
-    
-    # Time series fields
-    timestamp: timedelta = Field(sa_column=Column(Interval, primary_key=True, nullable=False))
-    
-    # Database fields
-    parent_id: int = Field(foreign_key="datasource.id", primary_key=True)
+    timestamp: timedelta = Field(primary_key=True)
+
+    parent_id: int = Field(foreign_key="forceplate.id", primary_key=True)
     parent: "ForcePlate" = Relationship(back_populates="data")
     
-    # Data fields
     force_x: float
     force_y: float
     force_z: float
@@ -35,7 +29,8 @@ class ForcePlateData(TimeSeriesData, table=True):
     freemoment_z: float
 
 class ForcePlate(DataSource, table=True):
-    __mapper_args__ = {"polymorphic_identity": "forceplate"}
+    id: int | None = Field(default=None, primary_key=True)
+
     trial_id: int | None = Field(default = None, foreign_key="trial.id")
     trial: "Trial" = Relationship(back_populates = "forceplates")
     
@@ -127,6 +122,6 @@ class ForcePlate(DataSource, table=True):
         rotated_fp = self.model_copy(deep=True)
         rotated_fp.corners = rotated_corners
         rotated_fp.origin = rotated_origin
-        rotated_fp.set_data(pl.DataFrame(data_dict))
+        rotated_fp.set_data(data_dict)
 
         return rotated_fp

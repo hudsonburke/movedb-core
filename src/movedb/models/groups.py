@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .trial import Trial
@@ -45,4 +45,4 @@ class TrialGroup(SQLModel, table=True):
     id: int | None = Field(default = None, primary_key=True)
     name: str = Field(index=True)
 
-    trials: list["Trial"] = Relationship(back_populates="groups")
+    trials: list["Trial"] = Relationship(back_populates="groups", link_model=TrialGroupLink)
