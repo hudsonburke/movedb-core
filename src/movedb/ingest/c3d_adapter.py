@@ -45,8 +45,6 @@ class C3DAdapter(BaseModel):
         """
         param: dict = self.c3d.parameters
         for key in keys:
-            if not isinstance(param, dict):
-                return default
             param = param.get(key, {})
         value = param.get("value", default)
         
@@ -142,34 +140,43 @@ class C3DAdapter(BaseModel):
             raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
 
-        data_dict = {
-            "timestamp": [timedelta(seconds=t) for t in timestamps],
-            "force_x": force[0, :],
-            "force_y": force[1, :],
-            "force_z": force[2, :],
-            "moment_x": moment[0, :],
-            "moment_y": moment[1, :],
-            "moment_z": moment[2, :],
-            "cop_x": position[0, :],
-            "cop_y": position[1, :],
-            "cop_z": position[2, :],
-            "freemoment_x": free_moment[0, :],
-            "freemoment_y": free_moment[1, :],
-            "freemoment_z": free_moment[2, :]
-        }
+        # Convert column-oriented data to row-oriented list of dictionaries
+        data_list = []
+        for i in range(n_frames):
+            # Convert NaN values to 0.0 for force plate data (force plates shouldn't have NaN normally)
+            data_list.append({
+                "timestamp": timedelta(seconds=timestamps[i]),
+                "force_x": 0.0 if np.isnan(force[0, i]) else float(force[0, i]),
+                "force_y": 0.0 if np.isnan(force[1, i]) else float(force[1, i]),
+                "force_z": 0.0 if np.isnan(force[2, i]) else float(force[2, i]),
+                "moment_x": 0.0 if np.isnan(moment[0, i]) else float(moment[0, i]),
+                "moment_y": 0.0 if np.isnan(moment[1, i]) else float(moment[1, i]),
+                "moment_z": 0.0 if np.isnan(moment[2, i]) else float(moment[2, i]),
+                "cop_x": 0.0 if np.isnan(position[0, i]) else float(position[0, i]),
+                "cop_y": 0.0 if np.isnan(position[1, i]) else float(position[1, i]),
+                "cop_z": 0.0 if np.isnan(position[2, i]) else float(position[2, i]),
+                "freemoment_x": 0.0 if np.isnan(free_moment[0, i]) else float(free_moment[0, i]),
+                "freemoment_y": 0.0 if np.isnan(free_moment[1, i]) else float(free_moment[1, i]),
+                "freemoment_z": 0.0 if np.isnan(free_moment[2, i]) else float(free_moment[2, i])
+            })
 
         fp_model = ForcePlate(
+            name=f"ForcePlate_{index}",
             trial=trial,
             unit_force=fp.get("unit_force", "N"),
             unit_moment=fp.get("unit_moment", "Nm"),
             unit_position=fp.get("unit_position", "m"),
-            cal_matrix_data=fp.get("cal_matrix", np.eye(6)),
-            corners_data=fp.get("corners", np.zeros((4, 3))),
-            origin_data=fp.get("origin", np.zeros(3)),
             first_frame=self.c3d.header["points"]["first_frame"],
             last_frame=self.c3d.header["points"]["last_frame"],
             rate=rate,
-        ).set_data(data_dict)
+        )
+        
+        # Set the array properties using the property setters
+        fp_model.cal_matrix = fp.get("cal_matrix", np.eye(6))
+        fp_model.corners = fp.get("corners", np.zeros((4, 3)))
+        fp_model.origin = fp.get("origin", np.zeros(3))
+        
+        fp_model.set_data(data_list)
 
         return fp_model
 
@@ -195,23 +202,32 @@ class C3DAdapter(BaseModel):
             raise ValueError(f"Invalid POINT rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
 
-        data_dict = {
-            "timestamp": [timedelta(seconds=t) for t in timestamps],
-            "x": self.c3d.data["points"][0, index, :],
-            "y": self.c3d.data["points"][1, index, :],
-            "z": self.c3d.data["points"][2, index, :],
-            "residual": self.c3d.data["meta_points"]["residuals"][0, index, :]
-        }
+        # Convert column-oriented data to row-oriented list of dictionaries
+        data_list = []
+        for i in range(n_frames):
+            # Convert NaN values to None for database compatibility
+            x_val = self.c3d.data["points"][0, index, i]
+            y_val = self.c3d.data["points"][1, index, i]
+            z_val = self.c3d.data["points"][2, index, i]
+            residual_val = self.c3d.data["meta_points"]["residuals"][0, index, i]
+            
+            data_list.append({
+                "timestamp": timedelta(seconds=timestamps[i]),
+                "x": None if np.isnan(x_val) else float(x_val),
+                "y": None if np.isnan(y_val) else float(y_val),
+                "z": None if np.isnan(z_val) else float(z_val),
+                "residual": None if np.isnan(residual_val) else float(residual_val)
+            })
 
         marker = Marker(
             trial=trial,
-            name=self.get_param("POINT", "LABELS", index=index, default=""),
+            name=self.get_param("POINT", "LABELS", index=index, default="") or f"Marker_{index}",
             description=self.get_param("POINT", "DESCRIPTIONS", index=index, default=""),
             units=self.get_param("POINT", "UNITS", index=0, default="m"),
             rate=rate,
             first_frame=self.c3d.header["points"]["first_frame"],
             last_frame=self.c3d.header["points"]["last_frame"],
-        ).set_data(data_dict)
+        ).set_data(data_list)
         
         return marker
 
@@ -238,14 +254,19 @@ class C3DAdapter(BaseModel):
             raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
         timestamps = np.arange(n_frames) / rate
         
-        data_dict = {
-            "timestamp": [timedelta(seconds=t) for t in timestamps],
-            "value": self.c3d.data["analogs"][0, index, :]
-        }
+        # Convert column-oriented data to row-oriented list of dictionaries
+        data_list = []
+        for i in range(n_frames):
+            # Convert NaN values to 0.0 for analog data
+            val = self.c3d.data["analogs"][0, index, i]
+            data_list.append({
+                "timestamp": timedelta(seconds=timestamps[i]),
+                "value": 0.0 if np.isnan(val) else float(val)
+            })
         
         analog = Analog(
             trial=trial,
-            name=self.get_param("ANALOG", "LABELS", index=index, default=""),
+            name=self.get_param("ANALOG", "LABELS", index=index, default="") or f"Analog_{index}",
             units=self.get_param("ANALOG", "UNITS", index=index, default="V"),
             scale=self.get_param("ANALOG", "SCALE", index=index, default=1.0),
             offset=self.get_param("ANALOG", "OFFSET", index=index, default=0.0),
@@ -253,7 +274,7 @@ class C3DAdapter(BaseModel):
             first_frame=self.c3d.header["analogs"]["first_frame"],
             last_frame=self.c3d.header["analogs"]["last_frame"],
             rate=rate,
-        ).set_data(data_dict)
+        ).set_data(data_list)
 
         return analog
 

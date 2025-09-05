@@ -45,9 +45,9 @@ class ForcePlate(DataSource, table=True):
     def _get_data_model(cls) -> Type[ForcePlateData]:
         return ForcePlateData
 
-    cal_matrix_data: dict = Field(sa_column=Column(JSON))
-    corners_data: dict = Field(sa_column=Column(JSON))
-    origin_data: dict = Field(sa_column=Column(JSON))
+    cal_matrix_data: dict = Field(default={}, sa_column=Column(JSON))
+    corners_data: dict = Field(default={}, sa_column=Column(JSON))
+    origin_data: dict = Field(default={}, sa_column=Column(JSON))
 
     @property
     def cal_matrix(self) -> CalMatrixArray:
@@ -104,24 +104,28 @@ class ForcePlate(DataSource, table=True):
         rotated_cop = (rotation @ self.cop.T).T
         rotated_freemoment = (rotation @ self.freemoment.T).T
 
-        data_dict = {
-            "timestamp": self.timestamp,
-            "force_x": rotated_force[:, 0],
-            "force_y": rotated_force[:, 1],
-            "force_z": rotated_force[:, 2],
-            "moment_x": rotated_moment[:, 0],
-            "moment_y": rotated_moment[:, 1],
-            "moment_z": rotated_moment[:, 2],
-            "cop_x": rotated_cop[:, 0],
-            "cop_y": rotated_cop[:, 1],
-            "cop_z": rotated_cop[:, 2],
-            "freemoment_x": rotated_freemoment[:, 0],
-            "freemoment_y": rotated_freemoment[:, 1],
-            "freemoment_z": rotated_freemoment[:, 2]
-        }
+        # Convert column-oriented data to row-oriented list of dictionaries
+        n_frames = len(self.timestamp)
+        data_list = []
+        for i in range(n_frames):
+            data_list.append({
+                "timestamp": self.timestamp[i],
+                "force_x": 0.0 if np.isnan(rotated_force[i, 0]) else float(rotated_force[i, 0]),
+                "force_y": 0.0 if np.isnan(rotated_force[i, 1]) else float(rotated_force[i, 1]),
+                "force_z": 0.0 if np.isnan(rotated_force[i, 2]) else float(rotated_force[i, 2]),
+                "moment_x": 0.0 if np.isnan(rotated_moment[i, 0]) else float(rotated_moment[i, 0]),
+                "moment_y": 0.0 if np.isnan(rotated_moment[i, 1]) else float(rotated_moment[i, 1]),
+                "moment_z": 0.0 if np.isnan(rotated_moment[i, 2]) else float(rotated_moment[i, 2]),
+                "cop_x": 0.0 if np.isnan(rotated_cop[i, 0]) else float(rotated_cop[i, 0]),
+                "cop_y": 0.0 if np.isnan(rotated_cop[i, 1]) else float(rotated_cop[i, 1]),
+                "cop_z": 0.0 if np.isnan(rotated_cop[i, 2]) else float(rotated_cop[i, 2]),
+                "freemoment_x": 0.0 if np.isnan(rotated_freemoment[i, 0]) else float(rotated_freemoment[i, 0]),
+                "freemoment_y": 0.0 if np.isnan(rotated_freemoment[i, 1]) else float(rotated_freemoment[i, 1]),
+                "freemoment_z": 0.0 if np.isnan(rotated_freemoment[i, 2]) else float(rotated_freemoment[i, 2])
+            })
         rotated_fp = self.model_copy(deep=True)
         rotated_fp.corners = rotated_corners
         rotated_fp.origin = rotated_origin
-        rotated_fp.set_data(data_dict)
+        rotated_fp.set_data(data_list)
 
         return rotated_fp

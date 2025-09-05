@@ -80,6 +80,9 @@ class DataSource(ABC, SQLModel):
                 return data
             if all(isinstance(item, dict) for item in data):
                 return [data_model(**item) for item in data]
+            
+        if isinstance(data, dict):
+            return [data_model(**{str(k): v for k, v in data.items()})]
 
         raise TypeError(f"Unsupported data type: {type(data).__name__}.")
 
@@ -106,7 +109,7 @@ class DataSource(ABC, SQLModel):
             return cls._convert_data_statically(data, data_model)
         return data
     
-    def set_data(self, data: Any) -> "DataSource":
+    def set_data(self, data: Any):
         """Set data from various formats and return self for chaining."""
         data_model = self._get_data_model()
         self.data = self._convert_data_statically(data, data_model)

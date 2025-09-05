@@ -15,11 +15,11 @@ class MarkerData(TimeSeriesData, table=True):
     parent_id: int = Field(foreign_key="marker.id", primary_key=True)
     parent: "Marker" = Relationship(back_populates="data")
     
-    x: float
-    y: float
-    z: float
-    residual: float
-    
+    x: float = Field(nullable=True)
+    y: float = Field(nullable=True)
+    z: float = Field(nullable=True)
+    residual: float = Field(nullable=True)
+
 class Marker(DataSource, table=True):
     """Concrete implementation of DataSource for marker data."""
     id: int | None = Field(default=None, primary_key=True)
