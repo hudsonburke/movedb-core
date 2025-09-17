@@ -1,5 +1,6 @@
 import os
-import opensim as osim
+from pyopensim.tools import InverseDynamicsTool
+from pyopensim.common import Storage, ArrayStr
 from pydantic.dataclasses import dataclass
 
 @dataclass
@@ -31,7 +32,7 @@ def opensim_id(
     name : str
         Name for the analysis, used in output file names.
     model_path : str
-        Path to the OpenSim model file (.osim).
+        Path to the OpenSim model file (..
     ik_path : str
         Path to the Inverse Kinematics results file (.mot).
     output_dir : str, optional
@@ -57,15 +58,15 @@ def opensim_id(
     #   - Could always set working directory to the trial directory
     #   - OR print with relative paths and then set the tool to use absolute paths (see MATLAB toolbox)
     if id_setup_path is None:
-        id_tool = osim.InverseDynamicsTool()
+        id_tool = InverseDynamicsTool()
     else:
-        id_tool = osim.InverseDynamicsTool(os.path.abspath(id_setup_path))
+        id_tool = InverseDynamicsTool(os.path.abspath(id_setup_path))
 
     id_tool.setName(name)
-    # model = osim.Model(os.path.abspath(model_path))
+    # model = Model(os.path.abspath(model_path))
     id_tool.setModelFileName(os.path.abspath(model_path))
 
-    ik_sto = osim.Storage(ik_path)
+    ik_sto = Storage(ik_path)
     id_tool.setStartTime(ik_sto.getFirstTime())
     id_tool.setEndTime(ik_sto.getLastTime())
     id_tool.setCoordinatesFileName(ik_path)
@@ -79,7 +80,7 @@ def opensim_id(
 
     if excluded_forces is not None:
         # Exclude specified forces from the ID analysis
-        exclude = osim.ArrayStr()
+        exclude = ArrayStr()
         for force in excluded_forces:
             exclude.append(force)
         id_tool.setExcludedForces(exclude)

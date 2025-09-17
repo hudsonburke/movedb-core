@@ -1,5 +1,6 @@
 import os
-import opensim as osim
+from pyopensim.tools import InverseKinematicsTool
+from pyopensim.simulation import Model
 import numpy as np
 
 def opensim_ik(
@@ -18,7 +19,7 @@ def opensim_ik(
     name : str
         Name for the analysis, used in output file names.
     model_path : str
-        Path to the OpenSim model file (.osim). Must be compatible with the marker set in the TRC file.
+        Path to the OpenSim model file (.. Must be compatible with the marker set in the TRC file.
     trc_path : str | None, optional
         Path to the TRC file containing marker data. If None, assumes a TRC file named
         {name}.trc in the output directory, by default None
@@ -38,12 +39,12 @@ def opensim_ik(
         Path to the Inverse Kinematics setup file (.xml).
     """
     if ik_setup_path is None:
-        ik_tool = osim.InverseKinematicsTool()
+        ik_tool = InverseKinematicsTool()
     else:
-        ik_tool = osim.InverseKinematicsTool(os.path.abspath(ik_setup_path))
+        ik_tool = InverseKinematicsTool(os.path.abspath(ik_setup_path))
 
     ik_tool.setName(name)
-    model = osim.Model(os.path.abspath(model_path))
+    model = Model(os.path.abspath(model_path))
     ik_tool.setModel(model)
     ik_tool.setMarkerDataFileName(f"{name}.trc" if not trc_path else trc_path)
     ik_results_name = f"{name}_ik.mot"

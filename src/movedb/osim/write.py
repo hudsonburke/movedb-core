@@ -5,7 +5,9 @@ from loguru import logger
 from pydantic import BaseModel
 import polars as pl
 import numpy as np
-import opensim as osim
+from pyopensim.common import TimeSeriesTable, TimeSeriesTableVec3, STOFileAdapter, TRCFileAdapter
+from pyopensim.simulation import ExternalForce, ExternalLoads
+from pyopensim.simbody import Vec3, RowVector, RowVectorVec3
 from .utils import get_unit_conversion
 
 def export_trc(
@@ -30,7 +32,7 @@ def export_trc(
         coords.shape[1] == 3 for coords in markers.values()
     ), "All marker coordinates must be 3D"
 
-    table = osim.TimeSeriesTableVec3()
+    table = TimeSeriesTableVec3()
     marker_names = list(markers.keys())
     table.setColumnLabels(marker_names)
     conversion_factor = 1.0
@@ -57,11 +59,11 @@ def export_trc(
             else:
                 coords_converted = np.array([np.nan, np.nan, np.nan])
             row.append(
-                osim.Vec3(coords_converted[0], coords_converted[1], coords_converted[2])
+                Vec3(coords_converted[0], coords_converted[1], coords_converted[2])
             )
         time_val = time[frame]
-        table.appendRow(time_val, osim.RowVectorVec3(row))
-    adapter = osim.TRCFileAdapter()
+        table.appendRow(time_val, RowVectorVec3(row))
+    adapter = TRCFileAdapter()
     adapter.write(table, filepath)
 
 def export_mot(
@@ -73,7 +75,7 @@ def export_mot(
     """
     Export data to OpenSim MOT file format.
     """
-    mot_table = osim.TimeSeriesTable()
+    mot_table = TimeSeriesTable()
     
     if "time" not in data.columns:
         raise ValueError("Data must contain a 'time' column for MOT export")
@@ -87,7 +89,7 @@ def export_mot(
     for row in data.iter_rows(named=True):
         time_val = row["time"]
         row_data = [row[col] for col in data.columns if col != "time"]
-        mot_table.appendRow(time_val, osim.RowVector(row_data))
+        mot_table.appendRow(time_val, RowVector(row_data))
 
     column_labels = [col for col in data.columns if col != "time"]
     mot_table.setColumnLabels(column_labels)
@@ -110,7 +112,7 @@ def export_mot(
     
     for key, value in metadata.items():
         mot_table.addTableMetaDataString(key, str(value))
-    mot_file = osim.STOFileAdapter()
+    mot_file = STOFileAdapter()
     mot_file.write(mot_table, filepath)
 
 class OpenSimExternalForce(BaseModel):
@@ -123,11 +125,11 @@ class OpenSimExternalForce(BaseModel):
     torque_identifier: str = r"moment_"
     data_source_name: str | None = None
 
-    def to_opensim(self) -> osim.ExternalForce:
+    def to_opensim(self) -> ExternalForce:
         """
         Convert to OpenSim ExternalForce object.
         """
-        ext_force = osim.ExternalForce()
+        ext_force = ExternalForce()
         ext_force.setName(self.name)
         ext_force.setAppliedToBodyName(self.applied_to_body)
         ext_force.setForceExpressedInBodyName(self.force_expressed_in_body)
@@ -149,7 +151,7 @@ def export_external_loads(
     """
     Export external loads to OpenSim ExternalLoads .xml file.
     """
-    ext_loads = osim.ExternalLoads()
+    ext_loads = ExternalLoads()
     for force in external_forces:
         ext_loads.cloneAndAppend(force.to_opensim())
     if datafile_name is not None:
@@ -169,5 +171,5 @@ def export_force_platforms(
     Export force plate metadata to OpenSim ExternalLoads .xml file and the data to a .mot file.
     """
     
-    ext_loads = osim.ExternalLoads()
+    ext_loads = ExternalLoads()
 

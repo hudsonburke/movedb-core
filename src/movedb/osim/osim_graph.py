@@ -2,7 +2,7 @@ import polars as pl
 from itertools import product
 from collections import deque, defaultdict
 from pydantic import BaseModel, model_validator, Field, field_validator
-import opensim as osim
+import pyopensim.simulation as osim
 from loguru import logger
 import numpy as np
 import math
