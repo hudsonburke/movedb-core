@@ -1,5 +1,17 @@
 import os
 import opensim as osim
+from pydantic.dataclasses import dataclass
+
+@dataclass
+class IDSettings:
+    name: str
+    model_path: str
+    ik_path: str
+    output_dir: str = "."
+    id_setup_path: str | None = None
+    filter_cutoff: float = -1.0 
+    external_loads_file: str | None = None
+    excluded_forces: list[str] | None = None
 
 def opensim_id(
     name: str,

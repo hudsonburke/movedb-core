@@ -43,7 +43,7 @@ async def root():
             "crud": "/api/v1",
             "ingest": "/ingest", 
             "upload": "/upload",
-            "analysis": "/analysis"
+            "opensim": "/opensim"
         }
     }
 
