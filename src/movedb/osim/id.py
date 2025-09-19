@@ -14,7 +14,7 @@ class IDSettings:
     external_loads_file: str | None = None
     excluded_forces: list[str] | None = None
 
-def opensim_id(
+def run_id_tool(
     name: str,
     model_path: str,
     ik_path: str,

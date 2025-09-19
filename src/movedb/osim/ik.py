@@ -3,7 +3,7 @@ from pyopensim.tools import InverseKinematicsTool
 from pyopensim.simulation import Model
 import numpy as np
 
-def opensim_ik(
+def run_ik_tool(
     name: str,
     model_path: str,
     trc_path: str | None = None,
