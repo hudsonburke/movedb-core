@@ -1,7 +1,29 @@
 import os
-from pyopensim.tools import InverseKinematicsTool
-from pyopensim.simulation import Model
+from pyopensim.tools import InverseKinematicsTool, IKTaskSet
+from pyopensim.simulation import Model 
 import numpy as np
+from pydantic.dataclasses import dataclass
+
+@dataclass
+class IKSettings:
+    model_file: str
+    marker_file: str
+    coordinate_file: str
+    output_motion_file: str
+    start_time: float = -1.0
+    end_time: float = -1.0
+    task_set: IKTaskSet | None = None
+    constraint_weight: float = 1.0
+    accuracy: float = 1e-5
+    report_marker_locations: bool = False
+
+    @classmethod
+    def from_setup_file(cls, filepath: str):
+        pass
+    
+    def create_tool(self) -> InverseKinematicsTool:
+        return InverseKinematicsTool()
+    
 
 def run_ik_tool(
     name: str,
