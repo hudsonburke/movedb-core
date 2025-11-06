@@ -142,6 +142,18 @@ class C3DAdapter(BaseModel):
 
         # Convert column-oriented data to row-oriented list of dictionaries
         data_list = []
+        force_x = np.where(np.isnan(force[0, :]), 0.0, force[0, :])
+        force_y = np.where(np.isnan(force[1, :]), 0.0, force[1, :])
+        force_z = np.where(np.isnan(force[2, :]), 0.0, force[2, :])
+        moment_x = np.where(np.isnan(moment[0, :]), 0.0, moment[0, :])
+        moment_y = np.where(np.isnan(moment[1, :]), 0.0, moment[1, :])
+        moment_z = np.where(np.isnan(moment[2, :]), 0.0, moment[2, :])
+        cop_x = np.where(np.isnan(position[0, :]), 0.0, position[0, :])
+        cop_y = np.where(np.isnan(position[1, :]), 0.0, position[1, :])
+        cop_z = np.where(np.isnan(position[2, :]), 0.0, position[2, :])
+        free_moment_x = np.where(np.isnan(free_moment[0, :]), 0.0, free_moment[0, :])
+        free_moment_y = np.where(np.isnan(free_moment[1, :]), 0.0, free_moment[1, :])
+        free_moment_z = np.where(np.isnan(free_moment[2, :]), 0.0, free_moment[2, :])
         for i in range(n_frames):
             # Convert NaN values to 0.0 for force plate data (force plates shouldn't have NaN normally)
             data_list.append({

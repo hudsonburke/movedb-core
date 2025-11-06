@@ -131,4 +131,14 @@ class DataSource(ABC, SQLModel):
     @cached_property
     def to_polars(self) -> pl.DataFrame:
         records = self._data_records
-        return pl.from_records(records) if records else pl.DataFrame()
+        if not records:
+            return pl.DataFrame()
+
+        # Convert to pandas first, then to polars to avoid schema inference issues
+        pandas_df = self.to_pandas
+        if pandas_df.empty:
+            return pl.DataFrame()
+
+        # Reset index to make timestamp a regular column
+        pandas_df = pandas_df.reset_index()
+        return pl.from_pandas(pandas_df)

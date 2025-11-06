@@ -12,7 +12,7 @@ MoveDB provides tools for:
 # Core modules
 from . import models
 from . import ingest
-from . import plot
+from . import visualize
 from . import validation
 
 # OpenSim integration
@@ -40,7 +40,7 @@ def has_opensim() -> bool:
 __all__ = [
     "models",
     "ingest",
-    "plot",
+    "visualize",
     "validation",
     "osim",
     "has_opensim",

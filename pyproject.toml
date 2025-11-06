@@ -5,12 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "ezc3d>=1.5.19",
+    "ezc3d>=1.6.0",
+    "jupyter>=1.1.1",
     "loguru>=0.7.3",
-    "pandas>=2.3.2",
-    "plotly>=6.3.0",
-    "polars>=1.33.1",
-    "pyopensim>=0.2.1",
-    "scipy>=1.16.2",
+    "matplotlib>=3.10.7",
+    "pandas>=2.3.3",
+    "plotly>=6.3.1",
+    "polars>=1.34.0",
+    "pyopensim>=4.5.2.0",
+    "pyvista>=0.46.3",
     "sqlmodel>=0.0.24",
 ]
