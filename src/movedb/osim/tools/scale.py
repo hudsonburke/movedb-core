@@ -40,6 +40,15 @@ class ScaleSettings(AbstractToolSettings):
         """Create a ScaleTool instance."""
         return ScaleTool()
     
+    def _configure_common_settings(self, tool: ScaleTool) -> None:
+        """ScaleTool doesn't use the common AbstractTool settings.
+        
+        ScaleTool has its own configuration structure with
+        GenericModelMaker, ModelScaler, and MarkerPlacer components.
+        """
+        # Skip common settings - ScaleTool has different structure
+        pass
+    
     def _configure_tool_specific_settings(self, tool: ScaleTool) -> None:
         """Configure Scale-specific settings.
         
@@ -51,7 +60,8 @@ class ScaleSettings(AbstractToolSettings):
         # Configure GenericModelMaker
         generic_model_maker: GenericModelMaker = tool.getGenericModelMaker()
         generic_model_maker.setModelFileName(self.unscaled_model_path)
-        generic_model_maker.setMarkerSetFileName(self.marker_set_path)
+        if self.marker_set_path:
+            generic_model_maker.setMarkerSetFileName(self.marker_set_path)
         
         # Configure ModelScaler
         model_scaler: ModelScaler = tool.getModelScaler()
@@ -79,10 +89,10 @@ class ScaleSettings(AbstractToolSettings):
                     # Log warning but continue
                     print(f"Warning: Could not set scale factor for '{segment_name}': {e}")
         
-        # Configure MarkerPlacer
+        # Configure MarkerPlacer - typically used for marker placement optimization
+        # For now, we'll disable it and only use the scaling functionality
         marker_placer: MarkerPlacer = tool.getMarkerPlacer()
-        marker_placer.setApply(True)
-        marker_placer.setMarkerFileName(self.marker_file)
+        marker_placer.setApply(False)
         
         # Set output model filename
         tool.getModelScaler().setOutputModelFileName(self.output_model_file)

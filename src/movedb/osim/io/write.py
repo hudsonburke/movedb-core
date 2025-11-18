@@ -40,6 +40,13 @@ def export_trc(
             f"Output units {output_units} do not match points units {units}. Converting coordinates."
         )
         conversion_factor = get_unit_conversion(units, output_units)
+    
+    # Ensure rate is a scalar (extract from numpy array if needed)
+    if isinstance(rate, np.ndarray):
+        rate = float(rate.item())
+    else:
+        rate = float(rate)
+    
     table.addTableMetaDataString(
         "Units", units if output_units is None else output_units
     )

@@ -24,6 +24,12 @@ class IKSettings(AbstractToolSettings):
         """Create an InverseKinematicsTool instance."""
         return InverseKinematicsTool()
     
+    def _configure_common_settings(self, tool: InverseKinematicsTool) -> None:
+        """IK tool uses different method names than AbstractTool."""
+        # The model will be loaded by the tool when run() is called
+        # based on the model_file property in the XML
+        tool.setResultsDir(self.results_directory)
+    
     def _configure_tool_specific_settings(self, tool: InverseKinematicsTool) -> None:
         """Configure IK-specific settings.
         
@@ -32,13 +38,73 @@ class IKSettings(AbstractToolSettings):
         tool : InverseKinematicsTool
             The IK tool instance to configure
         """
+        # Set file paths that will be written to XML
         tool.setMarkerDataFileName(self.marker_file)
         tool.setOutputMotionFileName(self.output_motion_file)
-        tool.setConstraintWeight(self.constraint_weight)
-        tool.setAccuracy(self.accuracy)
+        
+        # Note: Many IK properties (accuracy, constraint_weight, time ranges, etc.)  
+        # are set via XML properties rather than Python API setter methods.
+        # These will be included in the XML when printToXML() is called.
         
         if self.task_set is not None:
             tool.set_IKTaskSet(self.task_set)
+    
+    def save_setup(self, filepath: str | None = None) -> str:
+        """Save IK tool setup to XML file with model file path.
+        
+        Parameters
+        ----------
+        filepath : str | None
+            Path to save the setup file. If None, uses results_directory
+            with a default name.
+            
+        Returns
+        -------
+        str
+            Path to the saved setup file
+        """
+        tool = self.create_tool()
+        
+        if filepath is None:
+            # Create default setup filename in results directory
+            from pathlib import Path
+            results_dir = Path(self.results_directory)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            tool_name = self.__class__.__name__.replace('Settings', '').lower()
+            filepath = str(results_dir / f"{tool_name}_setup.xml")
+        
+        # Write to XML, then add model file manually
+        tool.printToXML(filepath)
+        
+        # Read the XML file and add the model_file element
+        with open(filepath, 'r') as f:
+            content = f.read()
+        
+        # Insert model_file after the opening InverseKinematicsTool tag
+        import_line = '\t\t<model_file>{}</model_file>\n'.format(self.model_file)
+        content = content.replace(
+            '<InverseKinematicsTool',
+            '<InverseKinematicsTool',
+            1
+        )
+        # Find the end of the opening tag and insert after it
+        tag_end = content.find('>', content.find('<InverseKinematicsTool'))
+        if tag_end != -1:
+            # Insert after results_directory if it exists, otherwise after the opening tag
+            results_dir_pos = content.find('</results_directory>')
+            if results_dir_pos != -1:
+                insert_pos = results_dir_pos + len('</results_directory>') + 1
+            else:
+                insert_pos = tag_end + 1
+                if content[insert_pos] == '\n':
+                    insert_pos += 1
+            
+            content = content[:insert_pos] + import_line + content[insert_pos:]
+        
+        with open(filepath, 'w') as f:
+            f.write(content)
+        
+        return filepath
     
     def _create_result(
         self,
@@ -85,11 +151,55 @@ class IKSettings(AbstractToolSettings):
         )
     
     def run(self) -> IKResult:
-        """Execute IK analysis and return results.
+        """Execute IK analysis using XML-based workflow.
+        
+        Override the base run() to use XML-first approach: save settings to XML,
+        then load tool from XML (which loads the model), then run.
         
         Returns
         -------
         IKResult
             Structured IK results with motion file path and metadata
         """
-        return super().run()  # type: ignore[return-value]
+        from pathlib import Path
+        from datetime import datetime
+        
+        # Ensure results directory exists
+        results_dir = Path(self.results_directory)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        warnings = []
+        errors = []
+        success = False
+        start_time = datetime.now()
+        
+        try:
+            # Create and configure tool (for XML generation)
+            tool = self.create_tool()
+            
+            # Save setup XML with model_file injected
+            setup_file = self.save_setup()
+            
+            # CRITICAL: Recreate tool from XML file (this loads the model)
+            tool = InverseKinematicsTool(setup_file, True)  # True = load model
+            
+            # Execute tool
+            tool.run()
+            success = True
+            
+        except Exception as e:
+            errors.append(str(e))
+            setup_file = str(results_dir / "failed_setup.xml")
+            raise RuntimeError(f"Tool execution failed: {e}") from e
+            
+        finally:
+            end_time = datetime.now()
+            
+        return self._create_result(
+            setup_file=setup_file,
+            success=success,
+            start_time=start_time,
+            end_time=end_time,
+            warnings=warnings,
+            errors=errors,
+        )
