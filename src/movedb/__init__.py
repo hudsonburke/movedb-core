@@ -14,13 +14,14 @@ from . import models
 from . import ingest
 from . import visualize
 from . import validation
+from . import storage
 
 # OpenSim integration
 try:
     from . import osim
     _HAS_OSIM = True
-except ImportError:
-    # OpenSim module not available (likely due to missing OpenSim installation)
+except Exception:
+    # OpenSim module not available (likely due to missing OpenSim installation or dependencies)
     _HAS_OSIM = False
     osim = None
 
