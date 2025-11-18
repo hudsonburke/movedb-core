@@ -18,8 +18,6 @@ from .write import (
     export_external_loads,
     export_force_platforms,
     OpenSimExternalForce,
-    export_trial_to_trc,
-    export_trial_forceplates_to_mot,
 )
 from .read import sto_to_df, sto_to_numpy
 from .osim_graph import OsimGraph
@@ -27,19 +25,22 @@ from .utils import get_unit_conversion, createActuatorsFile, createCMCTaskSet
 from .cmc import CMCSettings
 
 __all__ = [
+    # Low-level export utilities (work with raw numpy/dict data)
     'export_trc',
     'export_mot',
     'export_external_loads',
     'export_force_platforms',
     'OpenSimExternalForce',
-    'export_trial_to_trc',
-    'export_trial_forceplates_to_mot',
+    # File readers
     'sto_to_df',
     'sto_to_numpy',
+    # Model analysis
     'OsimGraph',
+    # Utilities
     'get_unit_conversion',
     'createActuatorsFile',
     'createCMCTaskSet',
+    # Settings
     'CMCSettings',
 ]
 

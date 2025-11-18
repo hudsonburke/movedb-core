@@ -196,3 +196,130 @@ class Trial(SQLModel, table=True):
                 start_index = first_event_found_at + 1
         
         return sequences
+    
+    # ===== OpenSim Export Methods =====
+    
+    def export_to_trc(
+        self,
+        filepath: str,
+        output_units: str | None = None,
+        rotation: np.ndarray = np.eye(3),
+    ) -> None:
+        """
+        Export marker data to OpenSim TRC format.
+        
+        Args:
+            filepath: Output TRC file path
+            output_units: Optional output units (will convert if different from source)
+            rotation: Optional rotation matrix to apply to coordinates
+        """
+        from ..osim import export_trc
+        
+        if self.hdf5_path is None:
+            raise ValueError(
+                f"Trial {self.id} ('{self.name}') has no HDF5 data. "
+                f"Ensure trial was ingested with HDF5 storage enabled."
+            )
+        
+        # Load markers from HDF5
+        marker_data_dict = self.load_markers()
+        
+        # Extract data
+        markers_array = marker_data_dict['data']  # Shape: (n_frames, n_markers, 3)
+        marker_names = marker_data_dict['marker_names']
+        rate = marker_data_dict['rate']
+        units = marker_data_dict['units']
+        
+        # Convert to dict format expected by export_trc
+        markers = {}
+        for i, name in enumerate(marker_names):
+            # Extract marker data: (n_frames, 3)
+            marker_xyz = markers_array[:, i, :]
+            # Replace sentinel values with NaN
+            marker_xyz = np.where(marker_xyz == -9999.0, np.nan, marker_xyz)
+            markers[name] = marker_xyz
+        
+        # Generate time array
+        n_frames = markers_array.shape[0]
+        time = np.arange(n_frames) / rate
+        
+        # Export using low-level function
+        export_trc(
+            filepath=filepath,
+            markers=markers,
+            time=time,
+            rate=rate,
+            units=units,
+            output_units=output_units,
+            rotation=rotation
+        )
+    
+    def export_forceplates_to_mot(
+        self,
+        filepath: str,
+        metadata: dict[str, Any] = {},
+        rotation: np.ndarray = np.eye(3),
+    ) -> None:
+        """
+        Export force plate data to OpenSim MOT format.
+        
+        Args:
+            filepath: Output MOT file path
+            metadata: Optional metadata to include in MOT file
+            rotation: Optional rotation matrix to apply to force/moment/cop vectors
+        """
+        import polars as pl
+        from ..osim import export_mot
+        
+        if self.hdf5_path is None:
+            raise ValueError(
+                f"Trial {self.id} ('{self.name}') has no HDF5 data. "
+                f"Ensure trial was ingested with HDF5 storage enabled."
+            )
+        
+        if not self.forceplate_names:
+            raise ValueError(f"Trial {self.id} ('{self.name}') has no force plates")
+        
+        # Load all force plates
+        all_fp_data = self.load_all_forceplates()
+        
+        # Get first force plate to determine number of frames
+        first_fp = all_fp_data[self.forceplate_names[0]]
+        n_frames = first_fp['forces'].shape[0]
+        rate = first_fp['rate']
+        
+        # Generate time column
+        time = np.arange(n_frames) / rate
+        
+        # Build data dict
+        data_dict = {"time": time}
+        
+        for fp_name in self.forceplate_names:
+            fp_data = all_fp_data[fp_name]
+            forces = fp_data['forces']  # (n_frames, 3)
+            moments = fp_data['moments']  # (n_frames, 3)
+            cop = fp_data['cop']  # (n_frames, 3)
+            
+            # Apply rotation if provided
+            if not np.allclose(rotation, np.eye(3)):
+                forces = (rotation @ forces.T).T
+                moments = (rotation @ moments.T).T
+                cop = (rotation @ cop.T).T
+            
+            # Add to data dict with force plate prefix
+            prefix = fp_name.replace(" ", "_")
+            data_dict[f"{prefix}_force_vx"] = forces[:, 0]
+            data_dict[f"{prefix}_force_vy"] = forces[:, 1]
+            data_dict[f"{prefix}_force_vz"] = forces[:, 2]
+            data_dict[f"{prefix}_moment_x"] = moments[:, 0]
+            data_dict[f"{prefix}_moment_y"] = moments[:, 1]
+            data_dict[f"{prefix}_moment_z"] = moments[:, 2]
+            data_dict[f"{prefix}_force_px"] = cop[:, 0]
+            data_dict[f"{prefix}_force_py"] = cop[:, 1]
+            data_dict[f"{prefix}_force_pz"] = cop[:, 2]
+        
+        # Create polars DataFrame
+        df = pl.DataFrame(data_dict)
+        
+        # Export using low-level function
+        export_mot(filepath=filepath, data=df, metadata=metadata, nans_as_zero=True)
