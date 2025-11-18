@@ -84,15 +84,10 @@ class TestOpenSimExportFromHDF5:
     
     def test_export_trial_to_trc(self, trial_with_hdf5, tmp_path):
         """Test exporting trial to TRC format."""
-        from movedb.osim import export_trial_to_trc
-        
         output_file = tmp_path / "markers.trc"
         
-        # Export to TRC
-        export_trial_to_trc(
-            trial=trial_with_hdf5,
-            filepath=str(output_file)
-        )
+        # Export to TRC using instance method
+        trial_with_hdf5.export_to_trc(filepath=str(output_file))
         
         # Verify file was created
         assert output_file.exists()
@@ -108,13 +103,10 @@ class TestOpenSimExportFromHDF5:
     
     def test_export_trial_to_trc_with_units_conversion(self, trial_with_hdf5, tmp_path):
         """Test TRC export with units conversion."""
-        from movedb.osim import export_trial_to_trc
-        
         output_file = tmp_path / "markers_m.trc"
         
-        # Export with conversion from mm to m
-        export_trial_to_trc(
-            trial=trial_with_hdf5,
+        # Export with conversion from mm to m using instance method
+        trial_with_hdf5.export_to_trc(
             filepath=str(output_file),
             output_units="m"
         )
@@ -123,15 +115,10 @@ class TestOpenSimExportFromHDF5:
     
     def test_export_trial_forceplates_to_mot(self, trial_with_hdf5, tmp_path):
         """Test exporting force plates to MOT format."""
-        from movedb.osim import export_trial_forceplates_to_mot
-        
         output_file = tmp_path / "forces.mot"
         
-        # Export to MOT
-        export_trial_forceplates_to_mot(
-            trial=trial_with_hdf5,
-            filepath=str(output_file)
-        )
+        # Export to MOT using instance method
+        trial_with_hdf5.export_forceplates_to_mot(filepath=str(output_file))
         
         # Verify file was created
         assert output_file.exists()
@@ -146,18 +133,14 @@ class TestOpenSimExportFromHDF5:
     
     def test_export_without_hdf5_path_fails(self, tmp_path):
         """Test that export fails gracefully without HDF5 path."""
-        from movedb.osim import export_trial_to_trc
-        
         trial = Trial(name="no_hdf5_trial")
         output_file = tmp_path / "should_fail.trc"
         
-        with pytest.raises(ValueError, match="no HDF5 data path"):
-            export_trial_to_trc(trial=trial, filepath=str(output_file))
+        with pytest.raises(ValueError, match="no HDF5 data"):
+            trial.export_to_trc(filepath=str(output_file))
     
     def test_export_forceplates_without_data_fails(self, tmp_path):
         """Test that force plate export fails without force plates."""
-        from movedb.osim import export_trial_forceplates_to_mot
-        
         # Create trial with HDF5 but no force plates
         trial = Trial(
             id=2,
@@ -168,4 +151,4 @@ class TestOpenSimExportFromHDF5:
         output_file = tmp_path / "should_fail.mot"
         
         with pytest.raises(ValueError, match="no force plates"):
-            export_trial_forceplates_to_mot(trial=trial, filepath=str(output_file))
+            trial.export_forceplates_to_mot(filepath=str(output_file))

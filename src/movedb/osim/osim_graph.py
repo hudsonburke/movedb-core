@@ -1,7 +1,7 @@
 import polars as pl
 from itertools import product
 from collections import deque, defaultdict
-from pydantic import BaseModel, model_validator, Field, field_validator
+from pydantic import BaseModel, model_validator, Field, field_validator, ConfigDict
 import pyopensim.simulation as osim
 from loguru import logger
 import numpy as np
@@ -11,11 +11,7 @@ class OsimGraph(BaseModel):
     """
     A graph data structure representation of an OpenSim model with convenience functions.
     """
-    class Config:
-        arbitrary_types_allowed = True
-        json_encoders = {
-            osim.Model: lambda v: v.getName(),
-        }
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     osim_model: osim.Model
 

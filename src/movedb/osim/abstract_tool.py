@@ -1,5 +1,5 @@
 from pyopensim.simulation import AnalysisSet, ControllerSet, AbstractTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from abc import abstractmethod
 
 class AbstractToolSettings(BaseModel):
@@ -7,6 +7,8 @@ class AbstractToolSettings(BaseModel):
 
     Descriptions are available in Field(...) metadata for runtime/schema usage.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     model_file: str = Field(
         ...,
         description="Name of the .osim file used to construct a model.",
