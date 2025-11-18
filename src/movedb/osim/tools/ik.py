@@ -2,10 +2,10 @@ import os
 from pyopensim.tools import InverseKinematicsTool, IKTaskSet
 from pyopensim.simulation import Model 
 import numpy as np
-from pydantic import BaseModel, Field
+from .abstract_tool import AbstractToolSettings
 
-class IKSettings(BaseModel):
-    model_file: str
+class IKSettings(AbstractToolSettings):
+    
     marker_file: str
     coordinate_file: str
     output_motion_file: str

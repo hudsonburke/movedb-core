@@ -1,6 +1,5 @@
 """OpenSim export functionality."""
-import os
-from typing import Any, TYPE_CHECKING
+from typing import Any
 from loguru import logger
 from pydantic import BaseModel
 import polars as pl
@@ -8,10 +7,7 @@ import numpy as np
 from pyopensim.common import TimeSeriesTable, TimeSeriesTableVec3, STOFileAdapter, TRCFileAdapter
 from pyopensim.simulation import ExternalForce, ExternalLoads
 from pyopensim.simbody import Vec3, RowVector, RowVectorVec3
-from .utils import get_unit_conversion
-
-if TYPE_CHECKING:
-    from ..models import Trial
+from ..utils import get_unit_conversion
 
 def export_trc(
     filepath: str,
