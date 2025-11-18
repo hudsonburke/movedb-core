@@ -310,6 +310,30 @@ class OsimGraph(BaseModel):
         muscle_coords = list(set().union(*(self.muscle_coords[muscle] for muscle in muscle_names)))
         data = self.get_muscle_lengths_coordinates(muscle_names, muscle_coords, min_points)
         return pl.DataFrame(data, schema = muscle_coords + muscle_names)
+        
+    def get_all_muscle_lengths_rom(self, min_points : int = 10) -> dict[str, pl.DataFrame]:
+        """
+        Analyze muscle length through the range of motion of all coordinates.
+        
+        Returns:
+            Dict[str, pd.DataFrame]: A dictionary where keys are muscle names and 
+            values are DataFrames containing coordinate values and muscle lengths.
+        """
+        # TODO: Subsets and/or parallelization to speed up computation
+        results = {}
+        for coord_set, muscles in self.coords_muscles.items():
+            # check for locked coordinates
+            unlocked_coords = set([coord for coord in coord_set if not self.get_coordinate(coord).getDefaultLocked()])
+            if not unlocked_coords:
+                continue
+            diff = coord_set.difference(unlocked_coords)
+            # if diff:
+            #     self.logger.warning(f"Locked coordinates {diff} for muscles {muscles}")
+            df = self.get_muscle_lengths_rom(list(muscles), min_points=min_points)
+            # Add the coordinate values and muscle lengths to the results dictionary for each muscle
+            results.update({muscle: df[list(unlocked_coords) + [muscle]] for muscle in muscles})
+        
+        return results
     
     def get_muscle_lengths_from_data(
         self,

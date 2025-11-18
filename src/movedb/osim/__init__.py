@@ -20,10 +20,9 @@ from .write import (
     OpenSimExternalForce,
 )
 from .read import sto_to_df, sto_to_numpy
-from .id import opensim_id
-from .ik import opensim_ik
 from .osim_graph import OsimGraph
-from .utils import get_unit_conversion
+from .utils import get_unit_conversion, createActuatorsFile, createCMCTaskSet
+from .cmc import CMCSettings
 
 __all__ = [
     'export_trc',
@@ -33,10 +32,11 @@ __all__ = [
     'OpenSimExternalForce',
     'sto_to_df',
     'sto_to_numpy',
-    'opensim_id',
-    'opensim_ik',
     'OsimGraph',
-    'get_unit_conversion'
+    'get_unit_conversion',
+    'createActuatorsFile',
+    'createCMCTaskSet',
+    'CMCSettings',
 ]
 
 # Version info

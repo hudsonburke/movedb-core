@@ -2,10 +2,9 @@ import os
 from pyopensim.tools import InverseKinematicsTool, IKTaskSet
 from pyopensim.simulation import Model 
 import numpy as np
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel, Field
 
-@dataclass
-class IKSettings:
+class IKSettings(BaseModel):
     model_file: str
     marker_file: str
     coordinate_file: str
