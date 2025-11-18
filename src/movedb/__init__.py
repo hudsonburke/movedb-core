@@ -13,8 +13,14 @@ MoveDB provides tools for:
 from . import models
 from . import ingest
 from . import visualize
-from . import validation
 from . import storage
+
+# Validation module (depends on legacy models - deprecated)
+try:
+    from . import validation
+    _HAS_VALIDATION = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_VALIDATION = False
 
 # OpenSim integration
 try:
