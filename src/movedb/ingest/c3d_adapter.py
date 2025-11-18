@@ -99,60 +99,6 @@ class C3DAdapter(BaseModel):
             ),
             description=description
         )
-
-    def get_force_plate(self, trial: Trial, index: int = 0):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_force_plate() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
-
-    def get_marker(self, trial: Trial, index: int = 0):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_marker() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
-
-    def get_analog(self, trial: Trial, index: int = 0):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_analog() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
-
-    def get_all_markers(self, trial: Trial):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_all_markers() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
-
-    def get_all_analogs(self, trial: Trial):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_all_analogs() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
-
-    def get_all_force_plates(self, trial: Trial):
-        """
-        DEPRECATED: This method is deprecated and will be removed in a future version.
-        Use to_trial() which writes directly to HDF5 instead.
-        """
-        raise DeprecationWarning(
-            "get_all_force_plates() is deprecated. Use to_trial() which writes directly to HDF5."
-        )
     
     def get_all_events(self, trial: Trial) -> list[Event]:
         """
