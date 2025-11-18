@@ -22,17 +22,29 @@ class HDF5TrialStorage:
         self.hdf5_path = Path(hdf5_path)
         self.trial_id = trial_id
         self.mode = mode
-        self._file: Optional[h5py.File] = None
+        self._file: h5py.File  # Will be set in __enter__
     
-    def __enter__(self):
+    def __enter__(self) -> 'HDF5TrialStorage':
         """Open HDF5 file."""
         self._file = h5py.File(self.hdf5_path, self.mode)
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Close HDF5 file."""
-        if self._file:
+        if hasattr(self, '_file'):
             self._file.close()
+    
+    def _require_group(self, item) -> h5py.Group:
+        """Type guard to ensure item is an HDF5 Group."""
+        if not isinstance(item, h5py.Group):
+            raise TypeError(f"Expected HDF5 Group, got {type(item).__name__}")
+        return item
+    
+    def _require_dataset(self, item) -> h5py.Dataset:
+        """Type guard to ensure item is an HDF5 Dataset."""
+        if not isinstance(item, h5py.Dataset):
+            raise TypeError(f"Expected HDF5 Dataset, got {type(item).__name__}")
+        return item
     
     def write_markers(
         self,
@@ -84,18 +96,21 @@ class HDF5TrialStorage:
         Returns:
             Dict with keys: 'data', 'marker_names', 'rate', 'units', 'residuals'
         """
-        grp = self._file['markers']
+        grp = self._require_group(self._file['markers'])
+        data_ds = self._require_dataset(grp['data'])
+        marker_names_attr = grp.attrs['marker_names']
         
         result = {
-            'data': grp['data'][:],
-            'marker_names': [name.decode('utf-8') for name in grp.attrs['marker_names']],
+            'data': data_ds[:],
+            'marker_names': [name.decode('utf-8') for name in marker_names_attr],  # type: ignore
             'rate': grp.attrs['rate'],
             'units': grp.attrs['units'],
             'first_frame': grp.attrs['first_frame'],
         }
         
         if 'residuals' in grp:
-            result['residuals'] = grp['residuals'][:]
+            residuals_ds = self._require_dataset(grp['residuals'])
+            result['residuals'] = residuals_ds[:]
         
         return result
     
@@ -109,14 +124,16 @@ class HDF5TrialStorage:
         Returns:
             Array of shape (n_frames, 3) or None if not found
         """
-        grp = self._file['markers']
-        marker_names = [name.decode('utf-8') for name in grp.attrs['marker_names']]
+        grp = self._require_group(self._file['markers'])
+        marker_names_attr = grp.attrs['marker_names']
+        marker_names = [name.decode('utf-8') for name in marker_names_attr]  # type: ignore
         
         if marker_name not in marker_names:
             return None
         
         idx = marker_names.index(marker_name)
-        return grp['data'][:, idx, :]
+        data_ds = self._require_dataset(grp['data'])
+        return data_ds[:, idx, :]
     
     def write_analogs(
         self,
@@ -153,11 +170,13 @@ class HDF5TrialStorage:
     
     def read_analogs(self) -> Dict[str, Any]:
         """Read analog data from HDF5."""
-        grp = self._file['analogs']
+        grp = self._require_group(self._file['analogs'])
+        data_ds = self._require_dataset(grp['data'])
+        channel_names_attr = grp.attrs['channel_names']
         
         return {
-            'data': grp['data'][:],
-            'channel_names': [name.decode('utf-8') for name in grp.attrs['channel_names']],
+            'data': data_ds[:],
+            'channel_names': [name.decode('utf-8') for name in channel_names_attr],  # type: ignore
             'rate': grp.attrs['rate'],
             'units': grp.attrs['units'],
             'first_frame': grp.attrs['first_frame'],
@@ -214,12 +233,16 @@ class HDF5TrialStorage:
     
     def read_forceplate(self, name: str) -> Dict[str, Any]:
         """Read force plate data from HDF5."""
-        fp_group = self._file[f'forceplates/{name}']
+        fp_group = self._require_group(self._file[f'forceplates/{name}'])
+        
+        forces_ds = self._require_dataset(fp_group['forces'])
+        moments_ds = self._require_dataset(fp_group['moments'])
+        cop_ds = self._require_dataset(fp_group['cop'])
         
         return {
-            'forces': fp_group['forces'][:],
-            'moments': fp_group['moments'][:],
-            'cop': fp_group['cop'][:],
+            'forces': forces_ds[:],
+            'moments': moments_ds[:],
+            'cop': cop_ds[:],
             'cal_matrix': fp_group.attrs['cal_matrix'],
             'corners': fp_group.attrs['corners'],
             'origin': fp_group.attrs['origin'],
@@ -233,7 +256,8 @@ class HDF5TrialStorage:
         """List all force plates in the file."""
         if 'forceplates' not in self._file:
             return []
-        return list(self._file['forceplates'].keys())
+        fp_group = self._require_group(self._file['forceplates'])
+        return list(fp_group.keys())
     
     def write_events(self, events: List[Dict]) -> None:
         """
@@ -272,10 +296,15 @@ class HDF5TrialStorage:
     def read_events(self) -> List[Dict]:
         """Read events from HDF5."""
         grp = self._file.get('metadata')
-        if grp is None or 'events' not in grp:
+        if grp is None:
             return []
         
-        events_array = grp['events'][:]
+        grp = self._require_group(grp)
+        if 'events' not in grp:
+            return []
+        
+        events_dataset = self._require_dataset(grp['events'])
+        events_array = events_dataset[:]
         return [
             {
                 'context': e['context'].decode('utf-8'),
