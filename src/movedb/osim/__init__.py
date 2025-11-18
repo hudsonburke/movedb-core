@@ -18,6 +18,8 @@ from .write import (
     export_external_loads,
     export_force_platforms,
     OpenSimExternalForce,
+    export_trial_to_trc,
+    export_trial_forceplates_to_mot,
 )
 from .read import sto_to_df, sto_to_numpy
 from .osim_graph import OsimGraph
@@ -30,6 +32,8 @@ __all__ = [
     'export_external_loads',
     'export_force_platforms',
     'OpenSimExternalForce',
+    'export_trial_to_trc',
+    'export_trial_forceplates_to_mot',
     'sto_to_df',
     'sto_to_numpy',
     'OsimGraph',
