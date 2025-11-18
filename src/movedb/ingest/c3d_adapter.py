@@ -4,14 +4,13 @@ from typing import Any
 import numpy as np
 from ..models import (
     Event, 
-    Analog,
-    Marker,
-    ForcePlate,
     Trial,
     CaptureSession,
     Subject
 )
+from ..storage import HDF5TrialStorage, get_storage_config
 from pydantic import BaseModel
+from pathlib import Path
 
 class C3DAdapter(BaseModel):
     """
@@ -101,235 +100,60 @@ class C3DAdapter(BaseModel):
             description=description
         )
 
-    def get_force_plate(self, trial: Trial, index: int = 0) -> ForcePlate:
+    def get_force_plate(self, trial: Trial, index: int = 0):
         """
-        Extract force plate data from C3D file.
-
-        Args:
-            index: Index of the force plate to extract
-
-        Returns:
-            ForcePlate model instance
-
-        Raises:
-            ValueError: If force plate data is missing
-            IndexError: If force plate index is out of range
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
         """
-        if "platform" not in self.c3d.data:
-            raise ValueError(
-                "C3D object does not contain force plate data. "
-                "Make sure to set extract_forceplat_data=True in ezc3d.c3d constructor."
-            )
-
-        c3d_fp = self.c3d.data["platform"]
-        if index >= len(c3d_fp):
-            raise IndexError(
-                f"Index {index} out of range for force platforms. Available: {len(c3d_fp)}"
-            )
-
-        fp: dict = c3d_fp[index]
-        force = fp.get("force", np.zeros((3, 0)))
-        n_frames = force.shape[1]
-
-        moment = fp.get("moment", np.zeros((3, n_frames)))
-        position = fp.get("center_of_pressure", np.zeros((3, n_frames)))
-        free_moment = fp.get("Tz", np.zeros((3, n_frames)))
-
-        rate = self.get_param("ANALOG", "RATE", default=0.0)
-        if rate <= 0:
-            raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
-        timestamps = np.arange(n_frames) / rate
-
-        # Convert column-oriented data to row-oriented list of dictionaries
-        data_list = []
-        force_x = np.where(np.isnan(force[0, :]), 0.0, force[0, :])
-        force_y = np.where(np.isnan(force[1, :]), 0.0, force[1, :])
-        force_z = np.where(np.isnan(force[2, :]), 0.0, force[2, :])
-        moment_x = np.where(np.isnan(moment[0, :]), 0.0, moment[0, :])
-        moment_y = np.where(np.isnan(moment[1, :]), 0.0, moment[1, :])
-        moment_z = np.where(np.isnan(moment[2, :]), 0.0, moment[2, :])
-        cop_x = np.where(np.isnan(position[0, :]), 0.0, position[0, :])
-        cop_y = np.where(np.isnan(position[1, :]), 0.0, position[1, :])
-        cop_z = np.where(np.isnan(position[2, :]), 0.0, position[2, :])
-        free_moment_x = np.where(np.isnan(free_moment[0, :]), 0.0, free_moment[0, :])
-        free_moment_y = np.where(np.isnan(free_moment[1, :]), 0.0, free_moment[1, :])
-        free_moment_z = np.where(np.isnan(free_moment[2, :]), 0.0, free_moment[2, :])
-        for i in range(n_frames):
-            # Convert NaN values to 0.0 for force plate data (force plates shouldn't have NaN normally)
-            data_list.append({
-                "timestamp": timedelta(seconds=timestamps[i]),
-                "force_x": 0.0 if np.isnan(force[0, i]) else float(force[0, i]),
-                "force_y": 0.0 if np.isnan(force[1, i]) else float(force[1, i]),
-                "force_z": 0.0 if np.isnan(force[2, i]) else float(force[2, i]),
-                "moment_x": 0.0 if np.isnan(moment[0, i]) else float(moment[0, i]),
-                "moment_y": 0.0 if np.isnan(moment[1, i]) else float(moment[1, i]),
-                "moment_z": 0.0 if np.isnan(moment[2, i]) else float(moment[2, i]),
-                "cop_x": 0.0 if np.isnan(position[0, i]) else float(position[0, i]),
-                "cop_y": 0.0 if np.isnan(position[1, i]) else float(position[1, i]),
-                "cop_z": 0.0 if np.isnan(position[2, i]) else float(position[2, i]),
-                "freemoment_x": 0.0 if np.isnan(free_moment[0, i]) else float(free_moment[0, i]),
-                "freemoment_y": 0.0 if np.isnan(free_moment[1, i]) else float(free_moment[1, i]),
-                "freemoment_z": 0.0 if np.isnan(free_moment[2, i]) else float(free_moment[2, i])
-            })
-
-        fp_model = ForcePlate(
-            name=f"ForcePlate_{index}",
-            trial=trial,
-            unit_force=fp.get("unit_force", "N"),
-            unit_moment=fp.get("unit_moment", "Nm"),
-            unit_position=fp.get("unit_position", "m"),
-            first_frame=self.c3d.header["points"]["first_frame"],
-            last_frame=self.c3d.header["points"]["last_frame"],
-            rate=rate,
+        raise DeprecationWarning(
+            "get_force_plate() is deprecated. Use to_trial() which writes directly to HDF5."
         )
-        
-        # Set the array properties using the property setters
-        fp_model.cal_matrix = fp.get("cal_matrix", np.eye(6))
-        fp_model.corners = fp.get("corners", np.zeros((4, 3)))
-        fp_model.origin = fp.get("origin", np.zeros(3))
-        
-        fp_model.set_data(data_list)
 
-        return fp_model
-
-    def get_marker(self, trial: Trial, index: int = 0) -> Marker:
+    def get_marker(self, trial: Trial, index: int = 0):
         """
-        Extract marker data from C3D file.
-
-        Args:
-            index: Index of the marker to extract
-
-        Returns:
-            Marker model instance
-
-        Raises:
-            ValueError: If marker data is missing
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
         """
-        if "points" not in self.c3d.data:
-            raise ValueError("C3D object does not contain point data")
+        raise DeprecationWarning(
+            "get_marker() is deprecated. Use to_trial() which writes directly to HDF5."
+        )
 
-        n_frames = self.c3d.data["points"].shape[2]
-        rate = self.get_param("POINT", "RATE", default=0.0)
-        if rate <= 0:
-            raise ValueError(f"Invalid POINT rate: {rate}. Rate must be positive.")
-        timestamps = np.arange(n_frames) / rate
-
-        # Convert column-oriented data to row-oriented list of dictionaries
-        data_list = []
-        for i in range(n_frames):
-            # Convert NaN values to None for database compatibility
-            x_val = self.c3d.data["points"][0, index, i]
-            y_val = self.c3d.data["points"][1, index, i]
-            z_val = self.c3d.data["points"][2, index, i]
-            residual_val = self.c3d.data["meta_points"]["residuals"][0, index, i]
-            
-            data_list.append({
-                "timestamp": timedelta(seconds=timestamps[i]),
-                "x": None if np.isnan(x_val) else float(x_val),
-                "y": None if np.isnan(y_val) else float(y_val),
-                "z": None if np.isnan(z_val) else float(z_val),
-                "residual": None if np.isnan(residual_val) else float(residual_val)
-            })
-
-        marker = Marker(
-            trial=trial,
-            name=self.get_param("POINT", "LABELS", index=index, default="") or f"Marker_{index}",
-            description=self.get_param("POINT", "DESCRIPTIONS", index=index, default=""),
-            units=self.get_param("POINT", "UNITS", index=0, default="m"),
-            rate=rate,
-            first_frame=self.c3d.header["points"]["first_frame"],
-            last_frame=self.c3d.header["points"]["last_frame"],
-        ).set_data(data_list)
-        
-        return marker
-
-    def get_analog(self, trial: Trial, index: int = 0) -> Analog:
+    def get_analog(self, trial: Trial, index: int = 0):
         """
-        Extract analog channel data from C3D file.
-        
-        Args:
-            index: Index of the analog channel to extract
-            
-        Returns:
-            Analog model instance
-            
-        Raises:
-            ValueError: If analog data is missing
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
         """
-        if "analogs" not in self.c3d.data:
-            raise ValueError("C3D object does not contain analog data")
-            
-        # Get timestamps based on the analog frame rate
-        n_frames = self.c3d.data["analogs"].shape[2]
-        rate = self.get_param("ANALOG", "RATE", default=0.0)
-        if rate <= 0:
-            raise ValueError(f"Invalid ANALOG rate: {rate}. Rate must be positive.")
-        timestamps = np.arange(n_frames) / rate
-        
-        # Convert column-oriented data to row-oriented list of dictionaries
-        data_list = []
-        for i in range(n_frames):
-            # Convert NaN values to 0.0 for analog data
-            val = self.c3d.data["analogs"][0, index, i]
-            data_list.append({
-                "timestamp": timedelta(seconds=timestamps[i]),
-                "value": 0.0 if np.isnan(val) else float(val)
-            })
-        
-        analog = Analog(
-            trial=trial,
-            name=self.get_param("ANALOG", "LABELS", index=index, default="") or f"Analog_{index}",
-            units=self.get_param("ANALOG", "UNITS", index=index, default="V"),
-            scale=self.get_param("ANALOG", "SCALE", index=index, default=1.0),
-            offset=self.get_param("ANALOG", "OFFSET", index=index, default=0.0),
-            description=self.get_param("ANALOG", "DESCRIPTIONS", index=index, default=""),
-            first_frame=self.c3d.header["analogs"]["first_frame"],
-            last_frame=self.c3d.header["analogs"]["last_frame"],
-            rate=rate,
-        ).set_data(data_list)
+        raise DeprecationWarning(
+            "get_analog() is deprecated. Use to_trial() which writes directly to HDF5."
+        )
 
-        return analog
+    def get_all_markers(self, trial: Trial):
+        """
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
+        """
+        raise DeprecationWarning(
+            "get_all_markers() is deprecated. Use to_trial() which writes directly to HDF5."
+        )
 
-    def get_all_markers(self, trial: Trial) -> list[Marker]:
+    def get_all_analogs(self, trial: Trial):
         """
-        Extract all markers from C3D file.
-        
-        Returns:
-            Dictionary mapping marker labels to Marker instances
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
         """
-        labels = self.get_param("POINT", "LABELS", default=[])
-        return [
-            self.get_marker(trial=trial, index=i)
-            for i in range(len(labels))
-        ]
+        raise DeprecationWarning(
+            "get_all_analogs() is deprecated. Use to_trial() which writes directly to HDF5."
+        )
 
-    def get_all_analogs(self, trial: Trial) -> list[Analog]:
+    def get_all_force_plates(self, trial: Trial):
         """
-        Extract all analog channels from C3D file.
-        
-        Returns:
-            Dictionary mapping channel labels to Analog instances
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Use to_trial() which writes directly to HDF5 instead.
         """
-        labels = self.get_param("ANALOG", "LABELS", default=[])
-        return [
-            self.get_analog(trial=trial, index=i)
-            for i in range(len(labels))
-        ]
-
-    def get_all_force_plates(self, trial: Trial) -> list[ForcePlate]:
-        """
-        Extract all force plates from C3D file.
-        
-        Returns:
-            List of ForcePlate instances
-        """
-        if "platform" not in self.c3d.data:
-            return []
-        return [
-            self.get_force_plate(trial=trial, index=i)
-            for i in range(len(self.c3d.data["platform"]))
-        ]
-
+        raise DeprecationWarning(
+            "get_all_force_plates() is deprecated. Use to_trial() which writes directly to HDF5."
+        )
+    
     def get_all_events(self, trial: Trial) -> list[Event]:
         """
         Extract all events from C3D file.
@@ -347,16 +171,26 @@ class C3DAdapter(BaseModel):
                  name: str = '', 
                  timestamp: datetime | None = None,
                  capture_session: CaptureSession | None = None,
-                 subjects: list[Subject] | None = None
+                 subjects: list[Subject] | None = None,
+                 trial_id: int | None = None
                  ) -> Trial:
         """
-        Convert the C3D data to a Trial instance.
+        Convert the C3D data to a Trial instance with HDF5 storage.
+        
+        Args:
+            name: Trial name
+            timestamp: Trial timestamp
+            capture_session: Associated capture session
+            subjects: Associated subjects
+            trial_id: Trial ID (required for HDF5 path generation)
         
         Returns:
-            Trial instance populated with data from the C3D file
+            Trial instance with metadata and HDF5 path reference
         """
         if subjects is None:
             subjects = []
+        
+        # Extract metadata parameters
         parameters = {}
         # The PROCESSING group is not an official C3D parameter group, but Vicon uses it for subject parameters
         if "PROCESSING" in self.c3d.parameters:
@@ -367,17 +201,149 @@ class C3DAdapter(BaseModel):
                 else:
                     parameters[key] = arr
         
+        # Extract marker metadata
+        marker_labels = self.get_param("POINT", "LABELS", default=[])
+        marker_rate = self.get_param("POINT", "RATE", default=0.0)
+        marker_units = self.get_param("POINT", "UNITS", index=0, default="m")
+        
+        # Extract analog metadata
+        analog_labels = self.get_param("ANALOG", "LABELS", default=[])
+        analog_rate = self.get_param("ANALOG", "RATE", default=0.0)
+        
+        # Extract forceplate metadata
+        forceplate_names = []
+        forceplate_rate = analog_rate  # Force plates use analog rate
+        if "platform" in self.c3d.data:
+            forceplate_names = [f"ForcePlate_{i}" for i in range(len(self.c3d.data["platform"]))]
+        
+        # Get frame info
+        first_frame = self.c3d.header["points"]["first_frame"]
+        last_frame = self.c3d.header["points"]["last_frame"]
+        n_frames = last_frame - first_frame + 1
+        
+        # Create Trial model with metadata
         trial = Trial(
+            id=trial_id,
             name=name,
             timestamp=timestamp,
             capture_session=capture_session,
             subjects=subjects,
-            parameters=parameters
+            parameters=parameters,
+            marker_names=marker_labels,
+            analog_names=analog_labels,
+            forceplate_names=forceplate_names,
+            marker_rate=marker_rate,
+            analog_rate=analog_rate,
+            forceplate_rate=forceplate_rate,
+            n_frames=n_frames,
+            first_frame=first_frame,
+            last_frame=last_frame
         )
-
+        
+        # Extract events (stay in SQL - lightweight)
         trial.events = self.get_all_events(trial=trial)
-        trial.markers = self.get_all_markers(trial=trial)
-        trial.analogs = self.get_all_analogs(trial=trial)
-        trial.forceplates = self.get_all_force_plates(trial=trial)
-
+        
+        # Write time-series data to HDF5 if trial has an ID
+        if trial_id is not None:
+            self._write_to_hdf5(trial)
+        
         return trial
+    
+    def _write_to_hdf5(self, trial: Trial) -> None:
+        """
+        Write time-series data from C3D to HDF5 file.
+        
+        Args:
+            trial: Trial model with metadata
+        """
+        if trial.id is None:
+            raise ValueError("Trial must have an ID before writing to HDF5")
+        
+        # Generate HDF5 path
+        config = get_storage_config()
+        hdf5_dir = Path(config.hdf5_base_dir) / f"trials_{trial.id // 1000:06d}"
+        hdf5_dir.mkdir(parents=True, exist_ok=True)
+        hdf5_path = hdf5_dir / f"trial_{trial.id:06d}.h5"
+        trial.hdf5_path = str(hdf5_path)
+        
+        with HDF5TrialStorage(hdf5_path, trial_id=trial.id, mode='w') as storage:
+            # Write markers (vectorized - no per-frame loops!)
+            if "points" in self.c3d.data:
+                marker_data = self.c3d.data["points"]  # Shape: (4, n_markers, n_frames)
+                n_markers = marker_data.shape[1]
+                n_frames = marker_data.shape[2]
+                
+                # Reshape to (n_frames, n_markers, 3) for xyz
+                markers_xyz = np.transpose(marker_data[:3, :, :], (2, 1, 0))  # (n_frames, n_markers, 3)
+                
+                # Handle NaN values (convert to sentinel value for HDF5)
+                markers_xyz = np.where(np.isnan(markers_xyz), -9999.0, markers_xyz)
+                
+                storage.write_markers(
+                    data=markers_xyz,
+                    marker_names=trial.marker_names,
+                    rate=trial.marker_rate or 0.0,
+                    units=self.get_param("POINT", "UNITS", index=0, default="m"),
+                    first_frame=trial.first_frame
+                )
+            
+            # Write analogs (vectorized)
+            if "analogs" in self.c3d.data:
+                analog_data = self.c3d.data["analogs"]  # Shape: (1, n_analogs, n_frames)
+                # Reshape to (n_frames, n_analogs)
+                analogs_values = analog_data[0, :, :].T  # (n_frames, n_analogs)
+                
+                # Handle NaN values
+                analogs_values = np.where(np.isnan(analogs_values), 0.0, analogs_values)
+                
+                # Note: Scales and offsets are stored as metadata in Trial model
+                # but not applied here - they can be applied at read time if needed
+                
+                storage.write_analogs(
+                    data=analogs_values,
+                    channel_names=trial.analog_names,
+                    rate=trial.analog_rate or 0.0,
+                    units="V",  # Base units before scaling
+                    first_frame=trial.first_frame
+                )
+            
+            # Write force plates (vectorized)
+            if "platform" in self.c3d.data:
+                for i, fp in enumerate(self.c3d.data["platform"]):
+                    fp_name = trial.forceplate_names[i]
+                    
+                    # Extract force plate data
+                    force = fp.get("force", np.zeros((3, 0)))  # Shape: (3, n_frames)
+                    moment = fp.get("moment", np.zeros((3, force.shape[1])))
+                    cop = fp.get("center_of_pressure", np.zeros((3, force.shape[1])))
+                    
+                    n_frames = force.shape[1]
+                    
+                    # Transpose to (n_frames, 3) format
+                    forces = force.T  # (n_frames, 3)
+                    moments = moment.T  # (n_frames, 3)
+                    cop_data = cop.T  # (n_frames, 3)
+                    
+                    # Handle NaN values
+                    forces = np.where(np.isnan(forces), 0.0, forces)
+                    moments = np.where(np.isnan(moments), 0.0, moments)
+                    cop_data = np.where(np.isnan(cop_data), 0.0, cop_data)
+                    
+                    # Get calibration data
+                    cal_matrix = fp.get("cal_matrix", np.eye(6))
+                    corners = fp.get("corners", np.zeros((4, 3)))
+                    origin = fp.get("origin", np.zeros(3))
+                    
+                    storage.write_forceplate(
+                        name=fp_name,
+                        forces=forces,
+                        moments=moments,
+                        cop=cop_data,
+                        rate=trial.forceplate_rate or 0.0,
+                        cal_matrix=cal_matrix,
+                        corners=corners,
+                        origin=origin,
+                        unit_force=fp.get("unit_force", "N"),
+                        unit_moment=fp.get("unit_moment", "Nm"),
+                        unit_position=fp.get("unit_position", "m")
+                    )
