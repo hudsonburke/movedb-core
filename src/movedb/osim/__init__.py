@@ -8,7 +8,18 @@ from .io import (
 )
 from .analysis import OsimGraph
 from .utils import get_unit_conversion, createActuatorsFile, createCMCTaskSet
-from .tools import AbstractToolSettings, IDSettings, IKSettings, CMCSettings
+from .tools import (
+    AbstractToolSettings, 
+    IDSettings, 
+    IKSettings, 
+    CMCSettings, 
+    ScaleSettings,
+    ToolResult,
+    IKResult,
+    IDResult,
+    CMCResult,
+    ScaleResult,
+)
 
 __all__ = [
     'export_trc',
@@ -21,8 +32,14 @@ __all__ = [
     'get_unit_conversion',
     'createActuatorsFile',
     'createCMCTaskSet',
+    'AbstractToolSettings',
     'CMCSettings',
     'IDSettings',
     'IKSettings',
-    'AbstractToolSettings',
+    'ScaleSettings',
+    'ToolResult',
+    'IKResult',
+    'IDResult',
+    'CMCResult',
+    'ScaleResult',
 ]

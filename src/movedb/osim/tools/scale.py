@@ -1,76 +1,144 @@
-import os
 from pyopensim.tools import ScaleTool, ModelScaler, MarkerPlacer, GenericModelMaker
-from pyopensim.common import ScaleSet
-from pyopensim.common import ArrayDouble
+from pyopensim.common import ScaleSet, ArrayDouble
 from pyopensim.simbody import Vec3
-from typing import Iterable
-from pydantic.dataclasses import dataclass
+from datetime import datetime
+from pydantic import Field
+from .abstract_tool import AbstractToolSettings
+from .results import ScaleResult
 
-"""
-There are three parts to the scale tool:
-- GenericModelMaker
-    - unscaled_model_path
-    - marker_set_path
-- ModelScaler
-"""
 
-@dataclass
-class ScaleSetup:
-    name: str
-    unscaled_model_path: str
-    marker_set_path: str
-    marker_file_name: str
-    scale_factors: dict[str, Iterable] = {}
-    preserve_mass_distribution: bool = True
-    subject_mass: float | None = None
-    time_start: float | None = None
-    time_end: float | None = None
-
-def run_scale_tool(
-    name: str,
-    unscaled_model_path: str, 
-    marker_set_path: str, 
-    marker_file_name: str,
-    scale_factors: dict[str, Iterable] = {},
-    subject_mass: float | None = None,
-    scale_setup_path: str | None = None,
-    time_start: float | None = None,
-    time_end: float | None = None,
-    ):
-    # From OpenSim API documentation: All files in workflow are specified relative to where the subject file is
-    if scale_setup_path is not None and os.path.exists(scale_setup_path):
-        scale_tool = ScaleTool(os.path.abspath(scale_setup_path))
-    else:
-        scale_tool = ScaleTool()
-    scale_tool.setName(name)
+class ScaleSettings(AbstractToolSettings):
+    """Scale Tool settings.
     
-    model_scaler: ModelScaler = scale_tool.getModelScaler()
-    model_scaler.setApply(True)
-    model_scaler.setMarkerFileName(marker_file_name)
+    Configure and run the scale tool to scale a generic model to a subject's
+    anthropometry based on marker data.
+    """
     
-    time_range = ArrayDouble()
-    time_range.set(0, time_start)
-    time_range.set(1, time_end)
-    model_scaler.setTimeRange(time_range)
-
-    if subject_mass is not None:
-        model_scaler.setSubjectMass(subject_mass)
+    # Scale-specific parameters
+    unscaled_model_path: str = Field(description="Path to the unscaled/generic model file")
+    marker_set_path: str = Field(description="Path to the marker set file")
+    marker_file: str = Field(description="Path to marker data file for scaling (.trc)")
+    output_model_file: str = Field(description="Path for the output scaled model")
+    scale_factors: dict[str, tuple[float, float, float]] = Field(
+        default_factory=dict,
+        description="Scale factors for body segments {segment_name: (x, y, z)}"
+    )
+    preserve_mass_distribution: bool = Field(
+        True, 
+        description="Preserve mass distribution when scaling"
+    )
+    subject_mass: float | None = Field(
+        None, 
+        description="Subject's total mass (kg). If None, uses generic model mass"
+    )
+    time_range: tuple[float, float] | None = Field(
+        None,
+        description="Time range (start, end) for marker data to use in scaling"
+    )
+    
+    def _create_tool_instance(self) -> ScaleTool:
+        """Create a ScaleTool instance."""
+        return ScaleTool()
+    
+    def _configure_tool_specific_settings(self, tool: ScaleTool) -> None:
+        """Configure Scale-specific settings.
         
-    scale_set: ScaleSet = model_scaler.getScaleSet()
-    for scale_factor, vec in scale_factors.items():
-        try:
-            vec = Vec3(*vec) if not isinstance(vec, Vec3) else vec
-            scale_set.get(scale_factor).setScaleFactors(vec)
-        except Exception as e:
-            print(f"Warning: Could not set scale factor '{scale_factor}' with value '{vec}': {e}")
-            continue
+        Parameters
+        ----------
+        tool : ScaleTool
+            The Scale tool instance to configure
+        """
+        # Configure GenericModelMaker
+        generic_model_maker: GenericModelMaker = tool.getGenericModelMaker()
+        generic_model_maker.setModelFileName(self.unscaled_model_path)
+        generic_model_maker.setMarkerSetFileName(self.marker_set_path)
+        
+        # Configure ModelScaler
+        model_scaler: ModelScaler = tool.getModelScaler()
+        model_scaler.setApply(True)
+        model_scaler.setMarkerFileName(self.marker_file)
+        model_scaler.setPreserveMassDist(self.preserve_mass_distribution)
+        
+        if self.time_range is not None:
+            time_array = ArrayDouble()
+            time_array.set(0, self.time_range[0])
+            time_array.set(1, self.time_range[1])
+            model_scaler.setTimeRange(time_array)
+        
+        if self.subject_mass is not None:
+            model_scaler.setSubjectMass(self.subject_mass)
+        
+        # Apply scale factors
+        if self.scale_factors:
+            scale_set: ScaleSet = model_scaler.getScaleSet()
+            for segment_name, factors in self.scale_factors.items():
+                try:
+                    vec = Vec3(*factors)
+                    scale_set.get(segment_name).setScaleFactors(vec)
+                except Exception as e:
+                    # Log warning but continue
+                    print(f"Warning: Could not set scale factor for '{segment_name}': {e}")
+        
+        # Configure MarkerPlacer
+        marker_placer: MarkerPlacer = tool.getMarkerPlacer()
+        marker_placer.setApply(True)
+        marker_placer.setMarkerFileName(self.marker_file)
+        
+        # Set output model filename
+        tool.getModelScaler().setOutputModelFileName(self.output_model_file)
     
-    marker_placer: MarkerPlacer = scale_tool.getMarkerPlacer()
-    marker_placer.setApply(True)
-    marker_placer.setMarkerFileName(marker_file_name)
+    def _create_result(
+        self,
+        setup_file: str,
+        success: bool,
+        start_time: datetime,
+        end_time: datetime,
+        warnings: list[str],
+        errors: list[str],
+    ) -> ScaleResult:
+        """Create a ScaleResult object.
+        
+        Parameters
+        ----------
+        setup_file : str
+            Path to the setup XML file
+        success : bool
+            Whether execution succeeded
+        start_time : datetime
+            Execution start time
+        end_time : datetime
+            Execution end time
+        warnings : list[str]
+            Warning messages
+        errors : list[str]
+            Error messages
+            
+        Returns
+        -------
+        ScaleResult
+            Scale-specific result object
+        """
+        return ScaleResult(
+            success=success,
+            setup_file=setup_file,
+            results_directory=self.results_directory,
+            start_time=start_time,
+            end_time=end_time,
+            run_time=(end_time - start_time).total_seconds(),
+            warnings=warnings,
+            errors=errors,
+            output_model_file=self.output_model_file,
+            output_marker_set=None,  # TODO: Get from tool if generated
+            input_marker_file=self.marker_file,
+        )
+    
+    def run(self) -> ScaleResult:
+        """Execute Scale Tool analysis and return results.
+        
+        Returns
+        -------
+        ScaleResult
+            Structured Scale results with scaled model file path
+        """
+        return super().run()  # type: ignore[return-value]
 
-    generic_model_maker: GenericModelMaker = scale_tool.getGenericModelMaker()
-    generic_model_maker.setModelFileName(unscaled_model_path)
-    generic_model_maker.setMarkerSetFileName(marker_set_path)
-    
-    scale_tool.run()

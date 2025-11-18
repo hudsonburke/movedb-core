@@ -1,7 +1,9 @@
 from pyopensim.tools import CMCTool
 from pydantic import Field
 from typing import Literal
+from datetime import datetime
 from .abstract_tool import AbstractToolSettings
+from .results import CMCResult
 
 
 class CMCSettings(AbstractToolSettings):
@@ -168,5 +170,69 @@ class CMCSettings(AbstractToolSettings):
         tool.setRRAControlsFileName(self.rra_controls_file)
         tool.setLowpassCutoffFrequency(self.lowpass_cutoff_frequency)
         tool.setUseFastTarget(self.use_fast_optimization_target)
+    
+    def _create_result(
+        self,
+        setup_file: str,
+        success: bool,
+        start_time: datetime,
+        end_time: datetime,
+        warnings: list[str],
+        errors: list[str],
+    ) -> CMCResult:
+        """Create a CMCResult object.
+        
+        Parameters
+        ----------
+        setup_file : str
+            Path to the setup XML file
+        success : bool
+            Whether execution succeeded
+        start_time : datetime
+            Execution start time
+        end_time : datetime
+            Execution end time
+        warnings : list[str]
+            Warning messages
+        errors : list[str]
+            Error messages
+            
+        Returns
+        -------
+        CMCResult
+            CMC-specific result object
+        """
+        from pathlib import Path
+        results_dir = Path(self.results_directory)
+        
+        # CMC outputs multiple files - infer the names
+        # TODO: Could parse these from the tool's actual output settings
+        output_controls = str(results_dir / "cmc_controls.sto")
+        output_kinematics = str(results_dir / "cmc_kinematics.sto")
+        
+        return CMCResult(
+            success=success,
+            setup_file=setup_file,
+            results_directory=self.results_directory,
+            start_time=start_time,
+            end_time=end_time,
+            run_time=(end_time - start_time).total_seconds(),
+            warnings=warnings,
+            errors=errors,
+            output_controls_file=output_controls,
+            output_kinematics_file=output_kinematics,
+            desired_kinematics_file=self.desired_kinematics_file,
+        )
+    
+    def run(self) -> CMCResult:
+        """Execute CMC analysis and return results.
+        
+        Returns
+        -------
+        CMCResult
+            Structured CMC results with controls and kinematics file paths
+        """
+        return super().run()  # type: ignore[return-value]
+
         
         # Set actuators to exclude

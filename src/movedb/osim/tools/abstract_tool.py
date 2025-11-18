@@ -1,6 +1,12 @@
 from pyopensim.simulation import AnalysisSet, ControllerSet, AbstractTool
 from pydantic import BaseModel, Field, ConfigDict
 from abc import abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .results import ToolResult
 
 class AbstractToolSettings(BaseModel):
     """Abstract base class for tool settings.
@@ -126,3 +132,124 @@ class AbstractToolSettings(BaseModel):
         self._configure_tool_specific_settings(tool)
         
         return tool
+    
+    def save_setup(self, filepath: str | None = None) -> str:
+        """Save tool setup to XML file.
+        
+        Parameters
+        ----------
+        filepath : str | None
+            Path to save the setup file. If None, uses results_directory
+            with a default name.
+            
+        Returns
+        -------
+        str
+            Path to the saved setup file
+        """
+        tool = self.create_tool()
+        
+        if filepath is None:
+            # Create default setup filename in results directory
+            results_dir = Path(self.results_directory)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            tool_name = self.__class__.__name__.replace('Settings', '').lower()
+            filepath = str(results_dir / f"{tool_name}_setup.xml")
+        
+        tool.printToXML(filepath)
+        return filepath
+    
+    @abstractmethod
+    def _create_result(
+        self,
+        setup_file: str,
+        success: bool,
+        start_time: datetime,
+        end_time: datetime,
+        warnings: list[str],
+        errors: list[str],
+    ) -> "ToolResult":
+        """Create a result object specific to this tool.
+        
+        Subclasses must implement this to return their specific result type.
+        
+        Parameters
+        ----------
+        setup_file : str
+            Path to the setup XML file
+        success : bool
+            Whether execution succeeded
+        start_time : datetime
+            Execution start time
+        end_time : datetime
+            Execution end time
+        warnings : list[str]
+            Warning messages
+        errors : list[str]
+            Error messages
+            
+        Returns
+        -------
+        ToolResult
+            Tool-specific result object
+        """
+        pass
+    
+    def run(self) -> "ToolResult":
+        """Execute the tool and return results.
+        
+        This method:
+        1. Validates settings
+        2. Creates and configures the tool
+        3. Saves setup XML
+        4. Executes the tool
+        5. Returns structured results
+        
+        Returns
+        -------
+        ToolResult
+            Structured results with metadata and output file paths
+            
+        Raises
+        ------
+        ValueError
+            If settings validation fails
+        RuntimeError
+            If tool execution fails
+        """
+        # Ensure results directory exists
+        results_dir = Path(self.results_directory)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        warnings = []
+        errors = []
+        success = False
+        start_time = datetime.now()
+        
+        try:
+            # Create and configure tool
+            tool = self.create_tool()
+            
+            # Save setup XML
+            setup_file = self.save_setup()
+            
+            # Execute tool
+            tool.run()
+            success = True
+            
+        except Exception as e:
+            errors.append(str(e))
+            setup_file = str(results_dir / "failed_setup.xml")
+            raise RuntimeError(f"Tool execution failed: {e}") from e
+            
+        finally:
+            end_time = datetime.now()
+            
+        return self._create_result(
+            setup_file=setup_file,
+            success=success,
+            start_time=start_time,
+            end_time=end_time,
+            warnings=warnings,
+            errors=errors,
+        )

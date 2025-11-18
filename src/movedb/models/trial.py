@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .events import Event
     from .hierarchy import CaptureSession, Subject
     from .groups import TrialGroup
+    from ..osim.tools.results import IKResult, IDResult
 
 class Trial(SQLModel, table=True):
     """Trial metadata (SQL) + time-series data (HDF5)."""
