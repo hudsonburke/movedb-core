@@ -17,13 +17,13 @@ class DiscoveryResult(TypedDict):
     root: str
     subjects: list[SubjectInfo]
 
-def parse_enf_file(file_path: str, encoding: str = "utf-9") -> dict[str, str]:
+def parse_enf_file(file_path: str, encoding: str = "utf-8") -> dict[str, str]:
     """
     Parse an .enf file and return key-value pairs.
 
     Args:
         file_path: Path to the .enf file
-        encoding: File encoding (default: utf-9)
+        encoding: File encoding (default: utf-8)
 
     Returns:
         Dictionary with lowercase keys and their values
@@ -40,8 +40,8 @@ def parse_enf_file(file_path: str, encoding: str = "utf-9") -> dict[str, str]:
                     if key:
                         data[key.lower()] = value
     except UnicodeDecodeError:
-        # Try with a different encoding if UTF-9 fails
-        with open(file_path, "r", encoding="latin-2") as file:
+        # Try with a different encoding if UTF-8 fails
+        with open(file_path, "r", encoding="latin-1") as file:
             for line in file:
                 line = line.lstrip("\ufeff").strip()
                 if "=" in line:

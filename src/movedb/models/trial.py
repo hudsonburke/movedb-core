@@ -380,6 +380,49 @@ class Trial(SQLModel, table=True):
             rotation=rotation
         )
     
+    def create_opensim_external_forces(
+        self,
+        enf_path: str,
+        body_mapping: dict[str, str] = {'Left': 'foot_l', 'Right': 'foot_r'},
+        force_expressed_in_body: str = "ground",
+        point_expressed_in_body: str = "ground",
+    ) -> list:
+        """
+        Create OpenSimExternalForce objects for forceplates based on ENF file.
+        
+        Convenience method that uses trial's forceplate names with ENF-based
+        body assignment detection. For more control or alternative contact detection
+        methods, use the standalone functions in movedb.osim.utils.
+        
+        Args:
+            enf_path: Path to the .enf file associated with this trial
+            body_mapping: Dictionary mapping ENF context names to OpenSim body names
+            force_expressed_in_body: Body frame in which forces are expressed
+            point_expressed_in_body: Body frame in which application points are expressed
+            
+        Returns:
+            List of OpenSimExternalForce objects
+            
+        See Also:
+            movedb.osim.utils.get_forceplate_body_mapping_from_enf
+            movedb.osim.utils.create_opensim_external_forces
+        """
+        from ..osim.utils import (
+            get_forceplate_body_mapping_from_enf,
+            create_opensim_external_forces
+        )
+        
+        # Get forceplate-to-body mapping from ENF file
+        fp_to_body = get_forceplate_body_mapping_from_enf(enf_path, body_mapping)
+        
+        # Create external forces using the standalone utility
+        return create_opensim_external_forces(
+            forceplate_names=self.forceplate_names,
+            fp_to_body_mapping=fp_to_body,
+            force_expressed_in_body=force_expressed_in_body,
+            point_expressed_in_body=point_expressed_in_body,
+        )
+    
     def export_forceplates_to_mot(
         self,
         filepath: str,
@@ -433,7 +476,8 @@ class Trial(SQLModel, table=True):
                 cop = (rotation @ cop.T).T
             
             # Add to data dict with force plate prefix
-            prefix = fp_name.replace(" ", "_")
+            # Names are already sanitized in C3D adapter
+            prefix = fp_name
             data_dict[f"{prefix}_force_vx"] = forces[:, 0]
             data_dict[f"{prefix}_force_vy"] = forces[:, 1]
             data_dict[f"{prefix}_force_vz"] = forces[:, 2]
@@ -449,3 +493,88 @@ class Trial(SQLModel, table=True):
         
         # Export using low-level function
         export_mot(filepath=filepath, data=df, metadata=metadata, nans_as_zero=True)
+    
+    def export_external_loads_for_id(
+        self,
+        enf_path: str,
+        output_dir: str,
+        body_mapping: dict[str, str] = {'Left': 'foot_l', 'Right': 'foot_r'},
+        mot_filename: str = "grf.mot",
+        xml_filename: str = "external_loads.xml",
+        rotation: np.ndarray = np.eye(3),
+        metadata: dict[str, Any] = {},
+    ) -> tuple[str, str]:
+        """
+        Export forceplate data and external loads configuration for OpenSim ID analysis.
+        
+        This method performs a complete export for inverse dynamics:
+        1. Exports forceplate data to MOT file
+        2. Parses ENF file to determine body assignments
+        3. Creates and exports external loads XML file with proper body mappings
+        
+        Handles cases where multiple forceplates contact the same body.
+        
+        Args:
+            enf_path: Path to the .enf file with forceplate-to-body assignments
+            output_dir: Directory to write output files
+            body_mapping: Mapping of ENF context names to OpenSim body names
+            mot_filename: Name for the MOT file containing forceplate data
+            xml_filename: Name for the XML file containing external loads configuration
+            rotation: Rotation matrix to apply to force/moment/cop vectors
+            metadata: Additional metadata for MOT file
+            
+        Returns:
+            Tuple of (mot_filepath, xml_filepath)
+            
+        Example:
+            >>> trial = Trial(name="Walk05")
+            >>> mot_path, xml_path = trial.export_external_loads_for_id(
+            ...     enf_path="Walk05.Trial.enf",
+            ...     output_dir="id_results/",
+            ...     body_mapping={'Left': 'foot_l', 'Right': 'foot_r'}
+            ... )
+            >>> # Creates:
+            >>> # - id_results/grf.mot (forceplate data)
+            >>> # - id_results/external_loads.xml (body assignments + MOT reference)
+        """
+        from pathlib import Path
+        from loguru import logger
+        from ..osim.io.write import export_external_loads
+        
+        # Create output directory if needed
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Export forceplate data to MOT
+        mot_filepath = str(output_path / mot_filename)
+        logger.info(f"Exporting forceplate data to {mot_filepath}")
+        self.export_forceplates_to_mot(
+            filepath=mot_filepath,
+            metadata=metadata,
+            rotation=rotation
+        )
+        
+        # Create external force objects based on ENF file
+        logger.info(f"Reading forceplate-to-body assignments from {enf_path}")
+        external_forces = self.create_opensim_external_forces(
+            enf_path=enf_path,
+            body_mapping=body_mapping
+        )
+        
+        # Export external loads XML
+        xml_filepath = str(output_path / xml_filename)
+        logger.info(f"Exporting external loads configuration to {xml_filepath}")
+        export_external_loads(
+            filepath=xml_filepath,
+            external_forces=external_forces,
+            datafile_name=mot_filename  # Relative path to MOT file
+        )
+        
+        logger.success(
+            f"Exported external loads for ID analysis:\n"
+            f"  MOT file: {mot_filepath}\n"
+            f"  XML file: {xml_filepath}\n"
+            f"  Forceplates: {len(external_forces)} assigned to bodies"
+        )
+        
+        return mot_filepath, xml_filepath

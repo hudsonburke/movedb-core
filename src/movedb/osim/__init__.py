@@ -7,7 +7,13 @@ from .io import (
     sto_to_df
 )
 from .analysis import OsimGraph
-from .utils import get_unit_conversion, createActuatorsFile, createCMCTaskSet
+from .utils import (
+    get_unit_conversion, 
+    createActuatorsFile, 
+    createCMCTaskSet,
+    get_forceplate_body_mapping_from_enf,
+    create_opensim_external_forces,
+)
 from .tools import (
     AbstractToolSettings, 
     IDSettings, 
@@ -32,6 +38,8 @@ __all__ = [
     'get_unit_conversion',
     'createActuatorsFile',
     'createCMCTaskSet',
+    'get_forceplate_body_mapping_from_enf',
+    'create_opensim_external_forces',
     'AbstractToolSettings',
     'CMCSettings',
     'IDSettings',

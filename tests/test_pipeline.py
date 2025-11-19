@@ -499,14 +499,54 @@ class TestOpenSimPipeline:
         assert ik_output_mot.exists(), "IK output file not created"
         print(f"[SAVED] IK output motion: {ik_output_mot}")
         
-        # 3. Run ID (TODO: Use template XML approach when available)
+        # 3. Export external loads for ID (forceplate data + body assignments)
         id_results_dir = output_dir / "id_results"
         id_results_dir.mkdir(exist_ok=True)
+        
+        # Find the ENF file for Walk05
+        walk_enf_path = TEST_DATA_DIR / "Walk05.Trial.enf"
+        assert walk_enf_path.exists(), f"ENF file not found: {walk_enf_path}"
+        
+        print(f"\n[DEBUG] Exporting external loads for ID...")
+        mot_path, xml_path = walk_trial.export_external_loads_for_id(
+            enf_path=str(walk_enf_path),
+            output_dir=str(id_results_dir),
+            body_mapping={'Left': 'foot_l', 'Right': 'foot_r'},
+            mot_filename="grf.mot",
+            xml_filename="external_loads.xml"
+        )
+        
+        assert Path(mot_path).exists(), "GRF MOT file not created"
+        assert Path(xml_path).exists(), "External loads XML not created"
+        print(f"[SAVED] GRF data: {mot_path}")
+        print(f"[SAVED] External loads: {xml_path}")
+        
+        # 4. Run ID
         id_output_sto = id_results_dir / "walk05_id.sto"
         
-        # For now, skip ID and just verify IK outputs
-        # id_settings = IDSettings(...)
-        # id_result = id_settings.run()
+        id_settings = IDSettings(
+            model_file=str(scaled_model_path),
+            results_directory=str(id_results_dir),
+            coordinates_file=str(ik_output_mot),
+            output_forces_file=str(id_output_sto),
+            external_loads_file=str(xml_path),
+            initial_time=ik_start_time,
+            final_time=ik_end_time,
+            lowpass_cutoff_frequency=6.0  # Common cutoff for gait data
+        )
+        
+        print(f"\n[DEBUG] Running ID...")
+        id_result = id_settings.run()
+        
+        if not id_result.success:
+            print(f"\n[ERROR] ID failed")
+            print(f"[DEBUG] Coordinates file exists: {Path(id_settings.coordinates_file).exists()}")
+            print(f"[DEBUG] External loads file exists: {Path(xml_path).exists()}")
+            print(f"[DEBUG] GRF MOT file exists: {Path(mot_path).exists()}")
+        
+        assert id_result.success, "ID failed"
+        assert Path(id_result.output_forces_file).exists(), "ID output file not created"
+        print(f"[SAVED] ID output: {id_result.output_forces_file}")
         
         # Verify outputs exist
         assert Path(scale_result.output_model_file).exists()
@@ -515,9 +555,10 @@ class TestOpenSimPipeline:
         # Verify output files have content
         assert Path(scale_result.output_model_file).stat().st_size > 0
         assert ik_output_mot.stat().st_size > 0
+        assert Path(id_result.output_forces_file).stat().st_size > 0
         
         print(f"\n{'='*80}")
-        print(f"✓ Complete pipeline test passed (Scale + IK)!")
+        print(f"✓ Complete pipeline test passed (Scale + IK + ID)!")
         print(f"{'='*80}")
         print(f"\nAll output files saved to: {output_dir}")
         print(f"  - Static TRC: static02.trc")
@@ -526,6 +567,10 @@ class TestOpenSimPipeline:
         print(f"  - IK setup: ik_results/ik_setup.xml")
         print(f"  - IK tool state: ik_results/ik_tool_state.xml")
         print(f"  - IK output: ik_results/walk05_ik.mot")
+        print(f"  - GRF data: id_results/grf.mot")
+        print(f"  - External loads: id_results/external_loads.xml")
+        print(f"  - ID setup: id_results/id_setup.xml")
+        print(f"  - ID output: id_results/walk05_id.sto")
         print(f"{'='*80}\n")
 
 
