@@ -2,23 +2,25 @@ from pyopensim.tools import ScaleTool, ModelScaler, MarkerPlacer, GenericModelMa
 from pyopensim.common import ScaleSet, ArrayDouble
 from pyopensim.simbody import Vec3
 from datetime import datetime
-from pydantic import Field
-from .abstract_tool import AbstractToolSettings
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict
 from .results import ScaleResult
 
 
-class ScaleSettings(AbstractToolSettings):
+class ScaleSettings(BaseModel):
     """Scale Tool settings.
     
     Configure and run the scale tool to scale a generic model to a subject's
     anthropometry based on marker data.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     # Scale-specific parameters
     unscaled_model_path: str = Field(description="Path to the unscaled/generic model file")
     marker_set_path: str = Field(description="Path to the marker set file")
     marker_file: str = Field(description="Path to marker data file for scaling (.trc)")
     output_model_file: str = Field(description="Path for the output scaled model")
+    results_directory: str = Field(".", description="Directory used for writing results.")
     scale_factors: dict[str, tuple[float, float, float]] = Field(
         default_factory=dict,
         description="Scale factors for body segments {segment_name: (x, y, z)}"
@@ -36,27 +38,16 @@ class ScaleSettings(AbstractToolSettings):
         description="Time range (start, end) for marker data to use in scaling"
     )
     
-    def _create_tool_instance(self) -> ScaleTool:
-        """Create a ScaleTool instance."""
-        return ScaleTool()
-    
-    def _configure_common_settings(self, tool: ScaleTool) -> None:
-        """ScaleTool doesn't use the common AbstractTool settings.
+    def create_tool(self) -> ScaleTool:
+        """Create and configure a ScaleTool instance.
         
-        ScaleTool has its own configuration structure with
-        GenericModelMaker, ModelScaler, and MarkerPlacer components.
+        Returns
+        -------
+        ScaleTool
+            Configured ScaleTool instance
         """
-        # Skip common settings - ScaleTool has different structure
-        pass
-    
-    def _configure_tool_specific_settings(self, tool: ScaleTool) -> None:
-        """Configure Scale-specific settings.
+        tool = ScaleTool()
         
-        Parameters
-        ----------
-        tool : ScaleTool
-            The Scale tool instance to configure
-        """
         # Configure GenericModelMaker
         generic_model_maker: GenericModelMaker = tool.getGenericModelMaker()
         generic_model_maker.setModelFileName(self.unscaled_model_path)
@@ -96,38 +87,69 @@ class ScaleSettings(AbstractToolSettings):
         
         # Set output model filename
         tool.getModelScaler().setOutputModelFileName(self.output_model_file)
+        
+        return tool
     
-    def _create_result(
-        self,
-        setup_file: str,
-        success: bool,
-        start_time: datetime,
-        end_time: datetime,
-        warnings: list[str],
-        errors: list[str],
-    ) -> ScaleResult:
-        """Create a ScaleResult object.
+    def save_setup(self, filepath: str | None = None) -> str:
+        """Save tool setup to XML file.
         
         Parameters
         ----------
-        setup_file : str
-            Path to the setup XML file
-        success : bool
-            Whether execution succeeded
-        start_time : datetime
-            Execution start time
-        end_time : datetime
-            Execution end time
-        warnings : list[str]
-            Warning messages
-        errors : list[str]
-            Error messages
+        filepath : str | None
+            Path to save the setup file. If None, uses results_directory
+            with a default name.
             
         Returns
         -------
-        ScaleResult
-            Scale-specific result object
+        str
+            Path to the saved setup file
         """
+        tool = self.create_tool()
+        
+        if filepath is None:
+            results_dir = Path(self.results_directory)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            filepath = str(results_dir / "scale_setup.xml")
+        
+        tool.printToXML(filepath)
+        return filepath
+    
+    def run(self) -> ScaleResult:
+        """Execute Scale Tool analysis and return results.
+        
+        Returns
+        -------
+        ScaleResult
+            Structured Scale results with scaled model file path
+        """
+        # Ensure results directory exists
+        results_dir = Path(self.results_directory)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        warnings = []
+        errors = []
+        success = False
+        start_time = datetime.now()
+        
+        try:
+            # Create and configure tool
+            tool = self.create_tool()
+            
+            # Save setup XML
+            setup_file = self.save_setup()
+            
+            # Execute tool
+            tool.run()
+            success = True
+            
+        except Exception as e:
+            errors.append(str(e))
+            setup_file = str(results_dir / "failed_setup.xml")
+            raise RuntimeError(f"Tool execution failed: {e}") from e
+            
+        finally:
+            end_time = datetime.now()
+        
         return ScaleResult(
             success=success,
             setup_file=setup_file,
@@ -141,14 +163,3 @@ class ScaleSettings(AbstractToolSettings):
             output_marker_set=None,  # TODO: Get from tool if generated
             input_marker_file=self.marker_file,
         )
-    
-    def run(self) -> ScaleResult:
-        """Execute Scale Tool analysis and return results.
-        
-        Returns
-        -------
-        ScaleResult
-            Structured Scale results with scaled model file path
-        """
-        return super().run()  # type: ignore[return-value]
-

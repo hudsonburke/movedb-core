@@ -1,53 +1,45 @@
 from pyopensim.tools import InverseKinematicsTool, IKTaskSet
 from datetime import datetime
-from pydantic import Field
-from .abstract_tool import AbstractToolSettings
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict
 from .results import IKResult
 
 
-class IKSettings(AbstractToolSettings):
+class IKSettings(BaseModel):
     """Inverse Kinematics tool settings.
     
     Configure and run inverse kinematics analysis to compute joint angles
     from marker trajectories.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     # IK-specific parameters
+    model_file: str = Field(description="Name of the .osim file used to construct a model.")
     marker_file: str = Field(description="Path to marker data file (.trc)")
     output_motion_file: str = Field(description="Path for output motion file (.mot)")
+    results_directory: str = Field(".", description="Directory used for writing results.")
     task_set: IKTaskSet | None = Field(None, description="IK task set for tracking")
     constraint_weight: float = Field(1.0, description="Weight for kinematic constraints")
     accuracy: float = Field(1e-5, description="Convergence accuracy")
     report_marker_locations: bool = Field(False, description="Report marker locations in output")
     
-    def _create_tool_instance(self) -> InverseKinematicsTool:
-        """Create an InverseKinematicsTool instance."""
-        return InverseKinematicsTool()
-    
-    def _configure_common_settings(self, tool: InverseKinematicsTool) -> None:
-        """IK tool uses different method names than AbstractTool."""
-        # The model will be loaded by the tool when run() is called
-        # based on the model_file property in the XML
-        tool.setResultsDir(self.results_directory)
-    
-    def _configure_tool_specific_settings(self, tool: InverseKinematicsTool) -> None:
-        """Configure IK-specific settings.
+    def create_tool(self) -> InverseKinematicsTool:
+        """Create and configure an InverseKinematicsTool instance.
         
-        Parameters
-        ----------
-        tool : InverseKinematicsTool
-            The IK tool instance to configure
+        Returns
+        -------
+        InverseKinematicsTool
+            Configured InverseKinematicsTool instance
         """
-        # Set file paths that will be written to XML
+        tool = InverseKinematicsTool()
+        tool.setResultsDir(self.results_directory)
         tool.setMarkerDataFileName(self.marker_file)
         tool.setOutputMotionFileName(self.output_motion_file)
         
-        # Note: Many IK properties (accuracy, constraint_weight, time ranges, etc.)  
-        # are set via XML properties rather than Python API setter methods.
-        # These will be included in the XML when printToXML() is called.
-        
         if self.task_set is not None:
             tool.set_IKTaskSet(self.task_set)
+        
+        return tool
     
     def save_setup(self, filepath: str | None = None) -> str:
         """Save IK tool setup to XML file with model file path.
@@ -106,64 +98,16 @@ class IKSettings(AbstractToolSettings):
         
         return filepath
     
-    def _create_result(
-        self,
-        setup_file: str,
-        success: bool,
-        start_time: datetime,
-        end_time: datetime,
-        warnings: list[str],
-        errors: list[str],
-    ) -> IKResult:
-        """Create an IKResult object.
-        
-        Parameters
-        ----------
-        setup_file : str
-            Path to the setup XML file
-        success : bool
-            Whether execution succeeded
-        start_time : datetime
-            Execution start time
-        end_time : datetime
-            Execution end time
-        warnings : list[str]
-            Warning messages
-        errors : list[str]
-            Error messages
-            
-        Returns
-        -------
-        IKResult
-            IK-specific result object
-        """
-        return IKResult(
-            success=success,
-            setup_file=setup_file,
-            results_directory=self.results_directory,
-            start_time=start_time,
-            end_time=end_time,
-            run_time=(end_time - start_time).total_seconds(),
-            warnings=warnings,
-            errors=errors,
-            output_motion_file=self.output_motion_file,
-            marker_file=self.marker_file,
-        )
-    
     def run(self) -> IKResult:
         """Execute IK analysis using XML-based workflow.
         
-        Override the base run() to use XML-first approach: save settings to XML,
-        then load tool from XML (which loads the model), then run.
+        Save settings to XML, load tool from XML (which loads the model), then run.
         
         Returns
         -------
         IKResult
             Structured IK results with motion file path and metadata
         """
-        from pathlib import Path
-        from datetime import datetime
-        
         # Ensure results directory exists
         results_dir = Path(self.results_directory)
         results_dir.mkdir(parents=True, exist_ok=True)
@@ -194,12 +138,16 @@ class IKSettings(AbstractToolSettings):
             
         finally:
             end_time = datetime.now()
-            
-        return self._create_result(
-            setup_file=setup_file,
+        
+        return IKResult(
             success=success,
+            setup_file=setup_file,
+            results_directory=self.results_directory,
             start_time=start_time,
             end_time=end_time,
+            run_time=(end_time - start_time).total_seconds(),
             warnings=warnings,
             errors=errors,
+            output_motion_file=self.output_motion_file,
+            marker_file=self.marker_file,
         )

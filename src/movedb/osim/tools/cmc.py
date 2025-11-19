@@ -1,16 +1,37 @@
 from pyopensim.tools import CMCTool
-from pydantic import Field
+from pyopensim.simulation import Model
+from pyopensim.common import ArrayStr
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal
 from datetime import datetime
-from .abstract_tool import AbstractToolSettings
+from pathlib import Path
+import glob
 from .results import CMCResult
 
 
-class CMCSettings(AbstractToolSettings):
+class CMCSettings(BaseModel):
     """CMC (Computed Muscle Control) settings.
 
     Descriptions are available in Field(...) metadata for runtime/schema usage.
     """
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    # Core parameters
+    model_file: str = Field(description="Path to OpenSim model file (.osim)")
+    results_directory: str = Field(".", description="Directory for results and setup files")
+    
+    # Time range
+    initial_time: float = Field(description="Initial time for analysis")
+    final_time: float = Field(description="Final time for analysis")
+    
+    # Optional settings
+    external_loads_file: str | None = Field(None, description="Path to external loads XML file")
+    force_set_files: list[str] = Field(
+        default_factory=list,
+        description="Paths to force set files (.xml) to add actuators"
+    )
+    
     solve_for_equilibrium_for_auxiliary_states: bool = Field(
         True,
         description=(
@@ -151,18 +172,33 @@ class CMCSettings(AbstractToolSettings):
         ),
     )
     
-    def _create_tool_instance(self) -> CMCTool:
-        """Create a CMCTool instance."""
-        return CMCTool()
-    
-    def _configure_tool_specific_settings(self, tool: CMCTool) -> None:
-        """Configure CMC-specific settings.
+    def create_tool(self) -> CMCTool:
+        """Create and configure a CMCTool instance.
         
-        Parameters
-        ----------
-        tool : CMCTool
-            The CMC tool instance to configure.
+        Returns
+        -------
+        CMCTool
+            Configured CMC tool ready for execution
         """
+        tool = CMCTool()
+        
+        # Set results directory and time range
+        tool.setResultsDir(self.results_directory)
+        tool.setInitialTime(self.initial_time)
+        tool.setFinalTime(self.final_time)
+        
+        # Set external loads if provided
+        if self.external_loads_file:
+            tool.setExternalLoadsFileName(self.external_loads_file)
+        
+        # Set force set files if provided
+        if self.force_set_files:
+            force_set_array = ArrayStr()
+            for file_path in self.force_set_files:
+                force_set_array.append(file_path)
+            tool.setForceSetFiles(force_set_array)
+        
+        # Set CMC-specific settings
         tool.setDesiredPointsFileName(self.desired_points_file)
         tool.setDesiredKinematicsFileName(self.desired_kinematics_file)
         tool.setTaskSetFileName(self.task_set_file)
@@ -170,45 +206,113 @@ class CMCSettings(AbstractToolSettings):
         tool.setRRAControlsFileName(self.rra_controls_file)
         tool.setLowpassCutoffFrequency(self.lowpass_cutoff_frequency)
         tool.setUseFastTarget(self.use_fast_optimization_target)
+        
+        return tool
     
-    def _create_result(
-        self,
-        setup_file: str,
-        success: bool,
-        start_time: datetime,
-        end_time: datetime,
-        warnings: list[str],
-        errors: list[str],
-    ) -> CMCResult:
-        """Create a CMCResult object.
+    def save_setup(self, filepath: str | None = None) -> str:
+        """Save CMC tool setup to XML file with model file path.
         
         Parameters
         ----------
-        setup_file : str
-            Path to the setup XML file
-        success : bool
-            Whether execution succeeded
-        start_time : datetime
-            Execution start time
-        end_time : datetime
-            Execution end time
-        warnings : list[str]
-            Warning messages
-        errors : list[str]
-            Error messages
+        filepath : str | None
+            Path to save the setup file. If None, uses results_directory
+            with a default name.
             
         Returns
         -------
+        str
+            Path to the saved setup file
+        """
+        tool = self.create_tool()
+        
+        if filepath is None:
+            # Create default setup filename in results directory
+            from pathlib import Path
+            results_dir = Path(self.results_directory)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            tool_name = self.__class__.__name__.replace('Settings', '').lower()
+            filepath = str(results_dir / f"{tool_name}_setup.xml")
+        
+        # Write to XML
+        tool.printToXML(filepath)
+        
+        # Read the XML file and replace the empty model_file element
+        with open(filepath, 'r') as f:
+            content = f.read()
+        
+        # Replace the empty model_file tag with the actual path
+        # The printToXML() writes <model_file /> which we need to replace
+        content = content.replace(
+            '<model_file />',
+            '<model_file>{}</model_file>'.format(self.model_file)
+        )
+        
+        with open(filepath, 'w') as f:
+            f.write(content)
+        
+        return filepath
+    
+    def run(self) -> CMCResult:
+        """Execute CMC analysis and return results.
+        
+        CMC requires explicitly loading and setting the model.
+        
+        Returns
+        -------
         CMCResult
-            CMC-specific result object
+            Structured CMC results with controls and kinematics file paths
         """
         from pathlib import Path
-        results_dir = Path(self.results_directory)
+        from pyopensim.simulation import Model
         
-        # CMC outputs multiple files - infer the names
-        # TODO: Could parse these from the tool's actual output settings
-        output_controls = str(results_dir / "cmc_controls.sto")
-        output_kinematics = str(results_dir / "cmc_kinematics.sto")
+        # Ensure results directory exists
+        results_dir = Path(self.results_directory)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        
+        warnings = []
+        errors = []
+        success = False
+        start_time = datetime.now()
+        
+        try:
+            # First create and save the setup XML
+            setup_file = self.save_setup()
+            
+            # Load the model explicitly
+            model = Model(self.model_file)
+            
+            # Initialize the system
+            state = model.initSystem()
+            
+            # Load CMC tool from the XML file
+            tool = CMCTool(setup_file, False)  # False = don't update from old versions
+            
+            # Set the model on the tool
+            tool.setModel(model)
+            
+            # Execute tool
+            result = tool.run()
+            success = result if isinstance(result, bool) else True
+            
+        except Exception as e:
+            errors.append(str(e))
+            setup_file = str(results_dir / "failed_setup.xml")
+            raise RuntimeError(f"Tool execution failed: {e}") from e
+            
+        finally:
+            end_time = datetime.now()
+        
+        # CMC creates output files with specific naming patterns
+        # Try to find the actual output files
+        controls_pattern = str(results_dir / "*_controls.xml")
+        kinematics_pattern = str(results_dir / "*_Kinematics*.sto")
+        
+        controls_files = glob.glob(controls_pattern)
+        kinematics_files = glob.glob(kinematics_pattern)
+        
+        # Use the first match if found, otherwise use default names
+        output_controls = controls_files[0] if controls_files else str(results_dir / "cmc_controls.sto")
+        output_kinematics = kinematics_files[0] if kinematics_files else str(results_dir / "cmc_kinematics.sto")
         
         return CMCResult(
             success=success,
@@ -223,16 +327,4 @@ class CMCSettings(AbstractToolSettings):
             output_kinematics_file=output_kinematics,
             desired_kinematics_file=self.desired_kinematics_file,
         )
-    
-    def run(self) -> CMCResult:
-        """Execute CMC analysis and return results.
-        
-        Returns
-        -------
-        CMCResult
-            Structured CMC results with controls and kinematics file paths
-        """
-        return super().run()  # type: ignore[return-value]
 
-        
-        # Set actuators to exclude

@@ -1,21 +1,32 @@
 from pyopensim.tools import InverseDynamicsTool
 from pyopensim.common import Storage, ArrayStr
 from datetime import datetime
-from pydantic import Field
-from .abstract_tool import AbstractToolSettings
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict
 from .results import IDResult
 
 
-class IDSettings(AbstractToolSettings):
+class IDSettings(BaseModel):
     """Inverse Dynamics tool settings.
     
     Configure and run inverse dynamics analysis to compute generalized forces
     from joint kinematics and external forces.
     """
     
-    # ID-specific parameters
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    # Core parameters
+    model_file: str = Field(description="Path to OpenSim model file (.osim)")
     coordinates_file: str = Field(description="Path to coordinates file (.mot) from IK")
     output_forces_file: str = Field(description="Path for output forces file (.sto)")
+    results_directory: str = Field(".", description="Directory for results and setup files")
+    
+    # Time range
+    initial_time: float = Field(-1.0, description="Initial time for analysis (-1 = auto from file)")
+    final_time: float = Field(-1.0, description="Final time for analysis (-1 = auto from file)")
+    
+    # Optional settings
+    external_loads_file: str | None = Field(None, description="Path to external loads XML file")
     lowpass_cutoff_frequency: float = Field(
         -1.0, 
         description="Cutoff frequency for filtering coordinates (-1 = no filtering)"
@@ -25,38 +36,39 @@ class IDSettings(AbstractToolSettings):
         description="List of force names to exclude from analysis"
     )
     
-    def _create_tool_instance(self) -> InverseDynamicsTool:
-        """Create an InverseDynamicsTool instance."""
-        return InverseDynamicsTool()
-    
-    def _configure_common_settings(self, tool: InverseDynamicsTool) -> None:
-        """ID tool uses different method names than AbstractTool."""
-        # ID tool doesn't use standard AbstractTool methods
+    def create_tool(self) -> InverseDynamicsTool:
+        """Create and configure an InverseDynamicsTool instance.
+        
+        Returns
+        -------
+        InverseDynamicsTool
+            Configured ID tool ready for execution
+        """
+        tool = InverseDynamicsTool()
+        
+        # Set results directory
         tool.setResultsDir(self.results_directory)
+        
+        # Set external loads if provided
         if self.external_loads_file:
             tool.setExternalLoadsFileName(self.external_loads_file)
-    
-    def _configure_tool_specific_settings(self, tool: InverseDynamicsTool) -> None:
-        """Configure ID-specific settings.
         
-        Parameters
-        ----------
-        tool : InverseDynamicsTool
-            The ID tool instance to configure
-        """
+        # Set coordinates and output files
         tool.setCoordinatesFileName(self.coordinates_file)
         tool.setOutputGenForceFileName(self.output_forces_file)
         
+        # Set filtering
         if self.lowpass_cutoff_frequency > 0:
             tool.setLowpassCutoffFrequency(self.lowpass_cutoff_frequency)
         
+        # Set excluded forces
         if self.excluded_forces:
             exclude = ArrayStr()
             for force in self.excluded_forces:
                 exclude.append(force)
             tool.setExcludedForces(exclude)
         
-        # Auto-detect time range from coordinates file
+        # Set time range (auto-detect from coordinates file if needed)
         if self.initial_time == -1.0 or self.final_time == -1.0:
             sto = Storage(self.coordinates_file)
             if self.initial_time == -1.0:
@@ -70,6 +82,8 @@ class IDSettings(AbstractToolSettings):
         else:
             tool.setStartTime(self.initial_time)
             tool.setEndTime(self.final_time)
+        
+        return tool
     
     def save_setup(self, filepath: str | None = None) -> str:
         """Save ID tool setup to XML file with model file path.
@@ -124,65 +138,16 @@ class IDSettings(AbstractToolSettings):
         
         return filepath
     
-    def _create_result(
-        self,
-        setup_file: str,
-        success: bool,
-        start_time: datetime,
-        end_time: datetime,
-        warnings: list[str],
-        errors: list[str],
-    ) -> IDResult:
-        """Create an IDResult object.
-        
-        Parameters
-        ----------
-        setup_file : str
-            Path to the setup XML file
-        success : bool
-            Whether execution succeeded
-        start_time : datetime
-            Execution start time
-        end_time : datetime
-            Execution end time
-        warnings : list[str]
-            Warning messages
-        errors : list[str]
-            Error messages
-            
-        Returns
-        -------
-        IDResult
-            ID-specific result object
-        """
-        return IDResult(
-            success=success,
-            setup_file=setup_file,
-            results_directory=self.results_directory,
-            start_time=start_time,
-            end_time=end_time,
-            run_time=(end_time - start_time).total_seconds(),
-            warnings=warnings,
-            errors=errors,
-            output_forces_file=self.output_forces_file,
-            coordinates_file=self.coordinates_file,
-            external_loads_file=self.external_loads_file if self.external_loads_file else None,
-        )
-    
     def run(self) -> IDResult:
         """Execute ID analysis using XML-based workflow.
         
-        Override the base run() to use XML-first approach: save settings to XML,
-        then load tool from XML (which loads the model), then run.
+        Save settings to XML, load tool from XML (which loads the model), then run.
         
         Returns
         -------
         IDResult
             Structured ID results with forces file path and metadata
         """
-        from pathlib import Path
-        from datetime import datetime
-        
         # Ensure results directory exists
         results_dir = Path(self.results_directory)
         results_dir.mkdir(parents=True, exist_ok=True)
@@ -213,12 +178,17 @@ class IDSettings(AbstractToolSettings):
             
         finally:
             end_time = datetime.now()
-            
-        return self._create_result(
-            setup_file=setup_file,
+        
+        return IDResult(
             success=success,
+            setup_file=setup_file,
+            results_directory=self.results_directory,
             start_time=start_time,
             end_time=end_time,
+            run_time=(end_time - start_time).total_seconds(),
             warnings=warnings,
             errors=errors,
+            output_forces_file=self.output_forces_file,
+            coordinates_file=self.coordinates_file,
+            external_loads_file=self.external_loads_file if self.external_loads_file else None,
         )

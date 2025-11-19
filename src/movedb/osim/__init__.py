@@ -15,7 +15,6 @@ from .utils import (
     create_opensim_external_forces,
 )
 from .tools import (
-    AbstractToolSettings, 
     IDSettings, 
     IKSettings, 
     CMCSettings, 
@@ -40,7 +39,6 @@ __all__ = [
     'createCMCTaskSet',
     'get_forceplate_body_mapping_from_enf',
     'create_opensim_external_forces',
-    'AbstractToolSettings',
     'CMCSettings',
     'IDSettings',
     'IKSettings',

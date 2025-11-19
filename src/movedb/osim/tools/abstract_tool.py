@@ -1,4 +1,15 @@
+"""Abstract tool settings base class (DEPRECATED).
+
+This module is deprecated and kept only for backwards compatibility.
+All tool classes (ScaleSettings, IKSettings, IDSettings, CMCSettings) have been
+refactored to be independent and no longer inherit from AbstractToolSettings.
+
+Only CMCTool actually inherits from AbstractTool in OpenSim's C++ API, so forcing
+all tools to inherit from a shared base class was an unnecessary architectural constraint.
+"""
+
 from pyopensim.simulation import AnalysisSet, ControllerSet, AbstractTool
+from pyopensim.common import ArrayStr
 from pydantic import BaseModel, Field, ConfigDict
 from abc import abstractmethod
 from datetime import datetime
@@ -10,6 +21,13 @@ if TYPE_CHECKING:
 
 class AbstractToolSettings(BaseModel):
     """Abstract base class for tool settings.
+    
+    .. deprecated::
+        This class is deprecated and no longer used internally. All tool settings
+        classes (ScaleSettings, IKSettings, IDSettings, CMCSettings) are now
+        independent and inherit directly from Pydantic's BaseModel.
+        
+        This class is kept for backwards compatibility only.
 
     Descriptions are available in Field(...) metadata for runtime/schema usage.
     """
@@ -100,7 +118,15 @@ class AbstractToolSettings(BaseModel):
         tool.setReplaceForceSet(self.replace_force_set)
         tool.setOutputPrecision(self.output_precision)
         tool.setExternalLoadsFileName(self.external_loads_file)
-        tool.setForceSetFiles(self.force_set_files)
+        
+        # Convert Python list to OpenSim ArrayStr
+        if self.force_set_files:
+            force_set_array = ArrayStr()
+            for file_path in self.force_set_files:
+                force_set_array.append(file_path)
+            tool.setForceSetFiles(force_set_array)
+        else:
+            tool.setForceSetFiles(ArrayStr())  # Empty array
     
     def _configure_tool_specific_settings(self, tool: AbstractTool) -> None:
         """Configure tool-specific settings.
