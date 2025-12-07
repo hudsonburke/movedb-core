@@ -1,6 +1,7 @@
 """Tests for refactored Trial model with HDF5 storage."""
 import pytest
 import numpy as np
+import json
 from pathlib import Path
 from datetime import timedelta, datetime
 
@@ -221,6 +222,66 @@ class TestTrialModel:
         """Test that loading without ID raises error."""
         trial = Trial(name="test_trial")
         trial.hdf5_path = "/some/path.h5"
-        
+
         with pytest.raises(ValueError, match="no HDF5 path or ID"):
             trial.load_markers()
+
+    def test_add_analysis_record(self):
+        """Test adding analysis records to trial history."""
+        trial = Trial(name="test_trial")
+
+        # Add a successful analysis record
+        trial.add_analysis_record(
+            tool="InverseKinematics",
+            settings={"model": "scaled.osim", "marker_file": "markers.trc"},
+            result_path="results/ik_provenance.json",
+            success=True
+        )
+
+        assert len(trial.analysis_history) == 1
+        record = trial.analysis_history[0]
+        assert record["tool"] == "InverseKinematics"
+        assert record["success"] == True
+        assert "timestamp" in record
+        assert record["settings"]["model"] == "scaled.osim"
+
+    def test_get_analysis_history(self):
+        """Test filtering analysis history."""
+        trial = Trial(name="test_trial")
+
+        # Add multiple analysis records
+        trial.add_analysis_record("Scale", {}, "scale.json")
+        trial.add_analysis_record("InverseKinematics", {}, "ik.json")
+        trial.add_analysis_record("InverseDynamics", {}, "id.json")
+
+        # Get all history
+        all_history = trial.get_analysis_history()
+        assert len(all_history) == 3
+
+        # Get filtered history
+        ik_history = trial.get_analysis_history("InverseKinematics")
+        assert len(ik_history) == 1
+        assert ik_history[0]["tool"] == "InverseKinematics"
+
+        # Get non-existent tool
+        empty_history = trial.get_analysis_history("NonExistent")
+        assert len(empty_history) == 0
+
+    def test_export_analysis_summary(self, tmp_path):
+        """Test exporting analysis summary as JSON."""
+        trial = Trial(id=123, name="walking_trial")
+        trial.add_analysis_record("Scale", {"mass": 75}, "scale.json")
+
+        filepath = tmp_path / "summary.json"
+        trial.export_analysis_summary(str(filepath))
+
+        assert filepath.exists()
+
+        # Verify JSON structure
+        with open(filepath) as f:
+            data = json.load(f)
+
+        assert data["trial"]["id"] == 123
+        assert data["trial"]["name"] == "walking_trial"
+        assert len(data["analyses"]) == 1
+        assert data["analyses"][0]["tool"] == "Scale"

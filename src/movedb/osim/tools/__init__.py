@@ -1,4 +1,4 @@
-from .cmc import CMCSettings
+# from .cmc import CMCSettings  # CMC not available in pyopensim
 from .id import IDSettings
 from .ik import IKSettings
 from .scale import ScaleSettings

@@ -1,22 +1,23 @@
 """Storage configuration for MoveDB."""
+
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional
 
 
-class StorageConfig(BaseModel):
+class StorageConfig(BaseModel):  # TODO: Maybe switch to Pydantic BaseSettings
     """Storage configuration for HDF5 and database."""
-    
+
     # Base directory for HDF5 files
     hdf5_base_dir: Path = Path("./data/hdf5_storage")
-    
+
     # SQL database URL
     database_url: str = "sqlite:///./data/movedb.db"
-    
+
     # HDF5 compression settings
     compression: str = "gzip"
     compression_opts: int = 4
-    
+
     def __init__(self, **data):
         super().__init__(**data)
         # Ensure directories exist
