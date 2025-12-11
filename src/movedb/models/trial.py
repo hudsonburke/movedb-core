@@ -36,15 +36,15 @@ class Trial(SQLModel, table=True):
 
     # Storage reference
     storage_path: str = Field(default="", description="Path to HDF5 storage file")
-    _storage: h5.File | None = Field(default=None, repr=False, exclude=True)
+    storage: h5.File | None = Field(default=None, repr=False, exclude=True)
 
     # Event data
     events: list["Event"] = Relationship(back_populates="trial")
 
     def _load_storage(self):
         try:
-            if self._storage is None:
-                self._storage = h5.File(self.storage_path, "r")
+            if self.storage is None:
+                self.storage = h5.File(self.storage_path, "r")
             return True
         except Exception as e:
             raise RuntimeError(
@@ -54,17 +54,17 @@ class Trial(SQLModel, table=True):
     @property
     def markers(self):
         self._load_storage()
-        return self._storage["markers"]
+        return self.storage["markers"]
 
     @property
     def analogs(self):
         self._load_storage()
-        return self._storage["analogs"]
+        return self.storage["analogs"]
 
     @property
     def forceplates(self):
         self._load_storage()
-        return self._storage["forceplates"]
+        return self.storage["forceplates"]
 
     def get_events(self, label: str = "", context: str = "") -> list["Event"]:
         """

@@ -19,7 +19,7 @@ Core library for movement database operations, including C3D file I/O and OpenSi
 
 ## Reproducibility Features
 
-MoveDB Core provides comprehensive reproducibility features for biomechanics research, particularly suited for thesis and publication work.
+MoveDB Core provides comprehensive reproducibility features for biomechanics research
 
 ### Complete Workflow Tracking
 
@@ -99,6 +99,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## FAQs
+
 **Q: Why Python?**
 A: Python is not the most performant language, but to maximize accessibility and ease of use, it is the best choice. Biomechanics researchers and practitioners often have limited programming experience, and Python's readability and extensive scientific libraries make it an ideal choice for this community. It also has a rich ecosystem of libraries for data analysis, machine learning, and scientific computing, which can be leveraged for advanced biomechanical analyses and reduces the need for researchers to reinvent the wheel. Particularly for this project, the use of SQLModel allows for a single codebase that can interact with both SQL databases and in-memory data structures seamlessly.
-
