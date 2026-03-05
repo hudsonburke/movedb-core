@@ -51,5 +51,3 @@ Early testing demonstrates significant time savings over conventional workflows,
 
 ## Discussion
 MoveDB is currently in active development, and community involvement is essential for its success. The project is open source, and we invite biomechanics researchers to contribute to the development of MoveDB by providing feedback, suggesting features, and participating in testing. By working together, we can create a robust and scalable platform that meets the needs of the biomechanics community and advances the field as a whole.
-
-## References

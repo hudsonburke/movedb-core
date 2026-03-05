@@ -3,7 +3,7 @@
 import numpy as np
 import polars as pl
 from typing import Literal
-from ..models import MarkerData, AnalogData, ForceplateData
+from ..core import MarkerData, AnalogData, ForceplateData
 
 
 def markers_to_polars(

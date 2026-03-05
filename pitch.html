@@ -2,10 +2,11 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.24">
+<meta name="generator" content="quarto-1.8.26">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Hudson Burke">
 
 <title>MoveDB: Toward a Scalable Biomechanics Database Platform for Reproducible Research</title>
 <style>
@@ -23,21 +24,18 @@ ul.task-list li input[type="checkbox"] {
 </style>
 
 
-<script src="movedb_files/libs/clipboard/clipboard.min.js"></script>
-<script src="movedb_files/libs/quarto-html/quarto.js" type="module"></script>
-<script src="movedb_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="movedb_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
-<script src="movedb_files/libs/quarto-html/popper.min.js"></script>
-<script src="movedb_files/libs/quarto-html/tippy.umd.min.js"></script>
-<script src="movedb_files/libs/quarto-html/anchor.min.js"></script>
-<link href="movedb_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="movedb_files/libs/quarto-html/quarto-syntax-highlighting-dc55a5b9e770e841cd82e46aadbfb9b0.css" rel="stylesheet" id="quarto-text-highlighting-styles">
-<script src="movedb_files/libs/bootstrap/bootstrap.min.js"></script>
-<link href="movedb_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="movedb_files/libs/bootstrap/bootstrap-f31a30f08fb427dd62a548a87f8a9c09.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
-<script src="movedb_files/libs/quarto-diagram/mermaid.min.js"></script>
-<script src="movedb_files/libs/quarto-diagram/mermaid-init.js"></script>
-<link href="movedb_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+<script src="pitch_files/libs/clipboard/clipboard.min.js"></script>
+<script src="pitch_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="pitch_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="pitch_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="pitch_files/libs/quarto-html/popper.min.js"></script>
+<script src="pitch_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="pitch_files/libs/quarto-html/anchor.min.js"></script>
+<link href="pitch_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="pitch_files/libs/quarto-html/quarto-syntax-highlighting-587c61ba64f3a5504c4d52d930310e48.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="pitch_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="pitch_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="pitch_files/libs/bootstrap/bootstrap-f31a30f08fb427dd62a548a87f8a9c09.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
@@ -54,10 +52,23 @@ ul.task-list li input[type="checkbox"] {
 </div>
 
 
+<div class="quarto-title-meta-author">
+  <div class="quarto-title-meta-heading">Author</div>
+  <div class="quarto-title-meta-heading">Affiliation</div>
+  
+    <div class="quarto-title-meta-contents">
+    <p class="author">Hudson Burke </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            University of Virginia
+          </p>
+      </div>
+  </div>
 
 <div class="quarto-title-meta">
 
-    
+      
   
     
   </div>
@@ -67,91 +78,22 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<section id="introduction" class="level2">
-<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
-<p>One of the major challenges facing modern biomechanics research is a cohesive strategy to handle “Big Data”. At ASB 2025, the majority of researchers voted that biomechanics was not prepared or capable of properly utilizing datasets at scale. Studies generate large volumes of complex data from motion capture systems, force plates, electromyography, and wearable sensors. However, the lack of standardized data management and sharing platforms hinders reproducibility and collaboration across research groups. MoveDB aims to address these challenges by providing a scalable database platform specifically designed for biomechanics research that can be deployed both locally and in the cloud. Its features can also be used without a central database, allowing researchers to manage and analyze data on their own systems.</p>
-<ul>
-<li>Reproducibility crisis</li>
-</ul>
+<p><em>Disclaimer: I submitted a similar abstract under the same name in the call for abstracts prior to being made aware of the pitch competition.</em></p>
+<section id="unmet-need-market-potential" class="level2">
+<h2 class="anchored" data-anchor-id="unmet-need-market-potential">Unmet Need &amp; Market Potential</h2>
+<p>Biomechanics research lacks a cohesive strategy to handle “Big Data”. At the American Society for Biomechanics 2025 meeting, a majority voted that biomechanics was not capable of properly utilizing large-scale datasets. Progress is hindered by disparate, file-based workflows that create inefficient and obtuse access strategies that are difficult to replicate even within one research group. MoveDB aims to be an open-source software platform addressing these challenges by providing scalable tools for data management, analysis, and sharing.</p>
 </section>
-<section id="methods" class="level2">
-<h2 class="anchored" data-anchor-id="methods">Methods</h2>
-<p>A large portion of the biomechanics community uses MATLAB for data analysis. While familiar and capable, MATLAB lacks … A lot of workflows also rely on specific file formats that are not widely supported outside of biomechanics, such as C3D files. MoveDB is designed to integrate with existing tools while providing a more flexible and scalable backend.</p>
-<ul>
-<li>Python
-<ul>
-<li>Strong data science libraries</li>
-<li>Robust and portable packaging options</li>
-<li>Free and open source ecosystem</li>
-<li>Beginner friendly</li>
-</ul></li>
-<li>SQL for metadata
-<ul>
-<li>Efficient querying</li>
-<li>Relational data structure</li>
-<li>SQLModel facilitates integration with FastAPI and allows models to be used in both the database and application layers</li>
-</ul></li>
-<li>HDF5 for time series data
-<ul>
-<li>Uniform storage of large datasets</li>
-<li>Separation of metadata and time series</li>
-</ul></li>
-<li>EZC3D
-<ul>
-<li>Used to read C3D files</li>
-<li>Not yet meant to write C3D files</li>
-<li>Cleaning to be done externally</li>
-</ul></li>
-<li>OpenSim
-<ul>
-<li>Most workflows rely on custom scripts that are not easily shared or reproduced</li>
-<li>MoveDB provides standardized data structures and APIs to facilitate sharing and collaboration</li>
-<li>Provenance tracking to ensure data integrity and reproducibility</li>
-<li>Readable pipeline configurations</li>
-</ul></li>
-</ul>
-<p>MoveDB architecture diagram</p>
-<div class="cell" data-layout-align="default">
-<div class="cell-output-display">
-<div>
-<p></p><figure class="figure"><p></p>
-<div>
-<pre class="mermaid mermaid-js">graph LR
-    subgraph "User / Client"
-        A[Researcher] --&gt; B[Python Client / API]
-        C[Analysis Scripts] -.-&gt; B
-    end
-
-    subgraph "MoveDB Core"
-        B &lt;--&gt; D[FastAPI Backend]
-        D &lt;--&gt; E[(PostgreSQL\nMetadata)]
-        D &lt;--&gt; F[(HDF5\nTime Series)]
-    end
-
-    subgraph "External Tools"
-        B --&gt; G[OpenSim / MuJoCo]
-        H[Raw C3D Files] --&gt; B
-    end
-
-    style D fill:#f9f,stroke:#333,stroke-width:2px
-    style E fill:#ccf,stroke:#333,stroke-width:2px
-    style F fill:#ccf,stroke:#333,stroke-width:2px
-</pre>
-</div>
-<p></p></figure><p></p>
-</div>
-</div>
-</div>
+<section id="technology-novelty-utility" class="level2">
+<h2 class="anchored" data-anchor-id="technology-novelty-utility">Technology Novelty &amp; Utility</h2>
+<p>While MATLAB has been the standard for biomechanics, its license, closed-source nature, and limited packages create barriers for reproducibility and collaboration. MoveDB has been developed using Python to leverage its strengths in data science, free and open source ecosystem, and portability. The platform supports efficient data ingestion, allowing users to upload C3D files, perform complex queries to filter datasets and utilize OpenSim’s API to run analyses programmatically. MoveDB also enables flexible deployment options, from local installations for individual researchers to cloud-based solutions for larger collaborations.</p>
 </section>
-<section id="results" class="level2">
-<h2 class="anchored" data-anchor-id="results">Results</h2>
+<section id="technical-feasibility" class="level2">
+<h2 class="anchored" data-anchor-id="technical-feasibility">Technical Feasibility</h2>
+<p>The platform utilizes a dual-layered data architecture: SQL for efficient metadata querying and HDF5 for time series data. Built with FastAPI and SQLModel, MoveDB provides high-performance data operations through a user-friendly interface. For common biomechanics workflows, we incorporate EZC3D for reading C3D files, and OpenSim’s Python API for biomechanical modeling and simulation. The modular design of MoveDB allows for easy integration of additional data formats and analysis tools in the future, ensuring the platform’s longevity in biomechanics research. The core ingestion and database mapping logic have been validated through pilot testing.</p>
 </section>
-<section id="discussion" class="level2">
-<h2 class="anchored" data-anchor-id="discussion">Discussion</h2>
-<p>In order for this project to be successful, community involvement is essential. We invite biomechanics researchers to contribute to the development of MoveDB by providing feedback, suggesting features, and participating in testing. By working together, we can create a robust and scalable platform that meets the needs of the biomechanics community and advances the field as a whole.</p>
-</section>
-<section id="references" class="level2">
-<h2 class="anchored" data-anchor-id="references">References</h2>
+<section id="translational-pathway" class="level2">
+<h2 class="anchored" data-anchor-id="translational-pathway">Translational Pathway</h2>
+<p>MoveDB is committed to a permanent open-source model, and community involvement is essential for its success. The roadmap focuses on expanding API capabilities and developing a web-based user interface to increase accessibility for non-computational researchers. We anticipate an initial release within the next year, followed by iterative, community-driven improvements to meet the evolving needs of the global biomechanics field.</p>
 </section>
 
 </main>

@@ -1,50 +1,30 @@
 import numpy as np
-from typing import Annotated
-from functools import partial
-from numpy.typing import NDArray
+from typing import Literal
 from pydantic import (
     BaseModel,
     Field,
     model_validator,
     PositiveFloat,
-    ConfigDict,
-    field_validator,
-    AfterValidator,
 )
+from numpydantic import NDArray
 
+Array3D = NDArray[Literal["* frames, 3 xyz"], np.float64]
 
-def shape_validator(value: NDArray, expected_shape: tuple[int, ...]):
-    """Generate a validator to check array shapes."""
-    if value.shape != expected_shape:
-        raise ValueError(
-            f"Array must have shape {expected_shape}. Got shape {value.shape}"
-        )
-    return value
-
-
-Origin = Annotated[
-    NDArray[np.float32], AfterValidator(partial(shape_validator, expected_shape=(3,)))
-]
-Corners = Annotated[
-    NDArray[np.float32], AfterValidator(partial(shape_validator, expected_shape=(4, 3)))
-]
-CalMatrix = Annotated[
-    NDArray[np.float32], AfterValidator(partial(shape_validator, expected_shape=(6, 6)))
-]
+Origin = NDArray[Literal["3 xyz"], np.float64]
+Corners = NDArray[Literal["4 corners, 3 xyz"], np.float64]
+CalMatrix = NDArray[Literal["6 rows, 6 columns"], np.float64]
 
 
 class ForceplateData(BaseModel):
     """Force plate data structure."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    forces: NDArray[np.float32] = Field(
+    forces: Array3D = Field(
         description="Force vectors array of shape (n_frames, 3) - xyz components"
     )
-    moments: NDArray[np.float32] = Field(
+    moments: Array3D = Field(
         description="Moment vectors array of shape (n_frames, 3) - xyz components"
     )
-    cop: NDArray[np.float32] = Field(
+    cop: Array3D = Field(
         description="Center of pressure array of shape (n_frames, 3) - xyz coordinates"
     )
     cal_matrix: CalMatrix = Field(description="Calibration matrix of shape (6, 6)")
@@ -59,28 +39,19 @@ class ForceplateData(BaseModel):
         description="Position units (e.g., 'm', 'mm')", default="m"
     )
 
-    @field_validator("forces", "moments", "cop")
-    def check_forceplate_arrays(cls, v: NDArray[np.float32]) -> NDArray[np.float32]:
-        if v.ndim != 2:
-            raise ValueError(
-                f"Force plate data arrays must be 2D (n_frames, 3). Got shape {v.shape}"
-            )
-        if v.shape[1] != 3:
-            raise ValueError(
-                f"Force plate data arrays must have 3 components (x, y, z). Got shape {v.shape}"
-            )
-        return v
-
     @model_validator(mode="after")
     def check_shapes(self) -> "ForceplateData":
-        force_frames, _ = self.forces.shape
+        forces = np.asarray(self.forces)
+        force_frames, _ = forces.shape
 
-        moment_frames, _ = self.moments.shape
+        moments = np.asarray(self.moments)
+        moment_frames, _ = moments.shape
         if moment_frames != force_frames:
             raise ValueError(
                 f"Moments frames {moment_frames} do not match forces frames {force_frames}."
             )
-        cop_frames, _ = self.cop.shape
+        cop = np.asarray(self.cop)
+        cop_frames, _ = cop.shape
         if cop_frames != force_frames:
             raise ValueError(
                 f"CoP frames {cop_frames} do not match forces frames {force_frames}."

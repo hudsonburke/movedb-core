@@ -42,6 +42,10 @@
 ## Feature Implementation
 
 - [ ] Finish the implementation of the `export_force_platforms` function in `osim/write.py`.
-- [] Implement data visualization features, potentially using `pyvista`.
+- [ ] Implement data visualization features, potentially using `pyvista`.
 - [ ] Implement asynchronous processing for database operations to improve performance.
 
+## Hail Mary
+
+- Rust rust rewrite of core library if performance becomes a bottleneck
+  - And so we can be cool

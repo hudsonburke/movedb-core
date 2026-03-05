@@ -2,10 +2,41 @@ import ezc3d
 from datetime import datetime, timedelta
 from typing import Any
 import numpy as np
-from ..models import Event, Trial, CaptureSession, Subject
+from ..core import Event, Trial, CaptureSession, Subject
 from pydantic import BaseModel, ConfigDict
 
 
+def get_param(
+    c3d: ezc3d.c3d, *keys: str, index: int | None = None, default: Any = None
+) -> Any:
+    """
+    Get nested parameters from the C3D object.
+
+    Args:
+        c3d: ezc3d.c3d object containing C3D data
+        *keys: Sequence of keys to access nested parameters
+        index: Optional index for array parameters
+        default: Default value if parameter not found
+
+    Returns:
+        Parameter value or default
+
+    Raises:
+        IndexError: If index is out of range for array parameters
+    """
+    param: dict = c3d.parameters
+    for key in keys:
+        param = param.get(key, {})
+    value = param.get("value", default)
+
+    if index is not None and (isinstance(value, list) or isinstance(value, np.ndarray)):
+        if index < 0 or index >= len(value):
+            raise IndexError(f"Index {index} out of range for parameter '{keys}'")
+        return value[index]
+    return value
+
+
+# TODO: This shouldn't be a class
 class C3DAdapter(BaseModel):
     """
     Adapter class for converting C3D file data to MoveDB models.
