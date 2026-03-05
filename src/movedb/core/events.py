@@ -1,57 +1,51 @@
 """Event data structures for biomechanical trials."""
-from typing import TYPE_CHECKING
-from pydantic import model_validator
-from sqlmodel import SQLModel, Field, Relationship
-from datetime import timedelta
-from sqlalchemy import Column, Interval
 
-if TYPE_CHECKING:
-    from .trial import Trial
+from pydantic import BaseModel, Field, model_validator
 
-class Event(SQLModel, table=True):
+
+class Event(BaseModel):
     """
-    Times will default to being stored in seconds.
-    See c3d event specification for details.
+    A discrete event within a biomechanical trial.
+
+    Times are stored as float seconds from trial onset.
+    See C3D event specification for details.
 
     Exactly one of 'frame' or 'time' must be provided.
     """
-    id: int | None = Field(default=None, primary_key=True)
-    trial_id: int | None = Field(default=None, foreign_key="trial.id")
-    trial: "Trial" = Relationship(back_populates="events")
 
-    context: str
-    label: str
+    context: str = Field(description="Event context (e.g., 'Left', 'Right', 'General')")
+    label: str = Field(description="Event label (e.g., 'Foot Strike', 'Foot Off')")
     frame: int | None = Field(default=None, description="Frame number")
-    time: timedelta | None = Field(
-        default=None, 
-        sa_column=Column(Interval),
-        description="Time from the start of the trial"
+    time: float | None = Field(
+        default=None,
+        description="Time in seconds from the start of the trial",
     )
-    description: str | None = None
+    description: str | None = Field(default=None, description="Optional event description")
 
     @model_validator(mode="after")
     def validate_exactly_one_temporal_field(self):
         """Ensure exactly one of frame or time is provided."""
-        fields_provided = sum([self.frame is not None, self.time is not None])
+        has_frame = self.frame is not None
+        has_time = self.time is not None
 
-        if fields_provided == 0:
+        if not has_frame and not has_time:
             raise ValueError("Exactly one of 'frame' or 'time' must be provided")
-        elif fields_provided > 1:
+        if has_frame and has_time:
             raise ValueError("Only one of 'frame' or 'time' may be provided, not both")
         return self
 
     def get_frame(self, rate: float | None = None) -> int:
+        """Get the frame number, computing from time and rate if necessary."""
         if self.frame is not None:
             return self.frame
         if self.time is not None and rate is not None and rate > 0:
-            return int(self.time.seconds * rate)
-        # This should not happen if validate_frames_or_times is called first
+            return int(self.time * rate)
         raise ValueError("Cannot compute frame without rate or time.")
 
-    def get_time(self, rate: float | None = None) -> timedelta:
+    def get_time(self, rate: float | None = None) -> float:
+        """Get the time in seconds, computing from frame and rate if necessary."""
         if self.time is not None:
             return self.time
         if self.frame is not None and rate is not None and rate > 0:
-            return timedelta(seconds=self.frame / rate)
-        # This should not happen if validate_frames_or_times is called first
+            return self.frame / rate
         raise ValueError("Cannot compute time without rate or frame.")

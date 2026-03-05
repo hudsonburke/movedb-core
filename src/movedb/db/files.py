@@ -33,7 +33,6 @@ class File(SQLModel):
     def __enter__(self, mode: Literal["r", "rb", "w", "wb", "a"] = "rb"):
         try:
             path = Path(self.path)
-            # Create parent directory if needed (for write/append modes)
             if mode in ("w", "wb", "a"):
                 path.parent.mkdir(parents=True, exist_ok=True)
         except FileNotFoundError as e:
