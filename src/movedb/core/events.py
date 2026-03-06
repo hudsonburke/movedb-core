@@ -1,6 +1,6 @@
 """Event data structures for biomechanical trials."""
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, PositiveFloat, PositiveInt
 
 
 class Event(BaseModel):
@@ -15,12 +15,14 @@ class Event(BaseModel):
 
     context: str = Field(description="Event context (e.g., 'Left', 'Right', 'General')")
     label: str = Field(description="Event label (e.g., 'Foot Strike', 'Foot Off')")
-    frame: int | None = Field(default=None, description="Frame number")
-    time: float | None = Field(
+    frame: PositiveInt | None = Field(default=None, description="Frame number")
+    time: PositiveFloat | None = Field(
         default=None,
         description="Time in seconds from the start of the trial",
     )
-    description: str | None = Field(default=None, description="Optional event description")
+    description: str | None = Field(
+        default=None, description="Optional event description"
+    )
 
     @model_validator(mode="after")
     def validate_exactly_one_temporal_field(self):
@@ -34,7 +36,7 @@ class Event(BaseModel):
             raise ValueError("Only one of 'frame' or 'time' may be provided, not both")
         return self
 
-    def get_frame(self, rate: float | None = None) -> int:
+    def get_frame(self, rate: PositiveFloat | None = None) -> int:
         """Get the frame number, computing from time and rate if necessary."""
         if self.frame is not None:
             return self.frame
@@ -42,7 +44,7 @@ class Event(BaseModel):
             return int(self.time * rate)
         raise ValueError("Cannot compute frame without rate or time.")
 
-    def get_time(self, rate: float | None = None) -> float:
+    def get_time(self, rate: PositiveFloat | None = None) -> float:
         """Get the time in seconds, computing from frame and rate if necessary."""
         if self.time is not None:
             return self.time

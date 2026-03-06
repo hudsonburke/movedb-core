@@ -21,10 +21,12 @@ class TrialData(BaseModel):
     trial_type: str = Field(
         default="",
         description="Type of trial (e.g., 'static', 'walking', 'running')",
-    )
+    )  # TODO: Rethink this
 
     # Signal data
-    markers: MarkerData | None = Field(default=None, description="Marker trajectory data")
+    markers: MarkerData | None = Field(
+        default=None, description="Marker trajectory data"
+    )
     analogs: AnalogData | None = Field(default=None, description="Analog channel data")
     forceplates: dict[str, ForceplateData] = Field(
         default_factory=dict,

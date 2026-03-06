@@ -128,8 +128,16 @@ def _find_platform_for_forceplate_number(
     return None
 
 
-def parse_mp_file(file_path) -> dict[str, Any]:
-    return {}
+def parse_mp_file(file_path, encoding: str = "utf-8") -> dict[str, Any]:
+    parameters = {}
+    with open(file_path, "r", encoding=encoding) as file:
+        for line in file:
+            line = line.lstrip("\ufeff").strip()
+            line = line.lstrip("$")
+            if "=" in line:
+                key, value = line.split("=", 1)
+                parameters[key.strip().lower()] = value.strip()
+    return parameters
 
 
 def parse_vsk_file():
