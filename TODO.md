@@ -4,6 +4,13 @@
 
 - [ ] Add plotting for core models
 
+## IO
+
+- [ ] Add support for different mocap systems
+  - [ ] Qualisys
+  - [ ] Theia
+  - [ ] OpenCap
+
 ### OpenSim integration
 
 - [ ] Add support for OpenSim files in database
@@ -49,3 +56,4 @@
 
 - Rust rust rewrite of core library if performance becomes a bottleneck
   - And so we can be cool
+  - The structure has attempted to be largely data structure and functionally oriented in a way that would facilitate this rewrite

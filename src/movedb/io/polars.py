@@ -1,10 +1,12 @@
-"""Converters between numpy arrays and Polars DataFrames for biomechanics data."""
+"""Converters between core models, Polars DataFrames, and Parquet files."""
+
+from pathlib import Path
 
 import numpy as np
 import polars as pl
 from typing import Any, Literal
 
-from ..core import MarkerData, AnalogData, ForceplateData
+from ..core import AnalogData, Event, ForceplateData, MarkerData
 
 
 def markers_to_polars(
@@ -279,3 +281,148 @@ def forceplates_to_polars(
         return pl.DataFrame()
 
     return pl.concat(dfs)
+
+
+# ------------------------------------------------------------------
+# Events converter
+# ------------------------------------------------------------------
+
+
+def events_to_polars(
+    events: list[Event],
+    trial_name: str | None = None,
+) -> pl.DataFrame:
+    """
+    Convert a list of Event models to a Polars DataFrame.
+
+    Args:
+        events: List of Event instances.
+        trial_name: If provided, a 'trial_name' column is added.
+
+    Returns:
+        Polars DataFrame with columns [context, label, time, frame, description]
+        (and trial_name if provided). Null values for time or frame when not set.
+    """
+    if not events:
+        schema: dict[str, type[pl.DataType]] = {
+            "context": pl.Utf8,
+            "label": pl.Utf8,
+            "time": pl.Float64,
+            "frame": pl.Int64,
+            "description": pl.Utf8,
+        }
+        if trial_name is not None:
+            schema["trial_name"] = pl.Utf8
+        return pl.DataFrame(schema=schema)
+
+    rows: list[dict[str, Any]] = []
+    for event in events:
+        row: dict[str, Any] = {
+            "context": event.context,
+            "label": event.label,
+            "time": event.time,
+            "frame": event.frame,
+            "description": event.description,
+        }
+        if trial_name is not None:
+            row["trial_name"] = trial_name
+        rows.append(row)
+
+    return pl.DataFrame(rows)
+
+
+# ------------------------------------------------------------------
+# Parquet writers
+# ------------------------------------------------------------------
+
+
+def write_markers_parquet(
+    marker_data: MarkerData,
+    path: Path | str,
+    trial_name: str | None = None,
+) -> Path:
+    """
+    Write marker data to a Parquet file in wide format.
+
+    Args:
+        marker_data: MarkerData instance.
+        path: Output file path.
+        trial_name: If provided, a 'trial_name' column is included.
+
+    Returns:
+        The resolved Path that was written.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = markers_to_polars(marker_data, format="wide", trial_name=trial_name)
+    df.write_parquet(path)
+    return path
+
+
+def write_analogs_parquet(
+    analog_data: AnalogData,
+    path: Path | str,
+    trial_name: str | None = None,
+) -> Path:
+    """
+    Write analog data to a Parquet file in wide format.
+
+    Args:
+        analog_data: AnalogData instance.
+        path: Output file path.
+        trial_name: If provided, a 'trial_name' column is included.
+
+    Returns:
+        The resolved Path that was written.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = analogs_to_polars(analog_data, format="wide", trial_name=trial_name)
+    df.write_parquet(path)
+    return path
+
+
+def write_forceplates_parquet(
+    forceplates_data: dict[str, ForceplateData],
+    path: Path | str,
+    trial_name: str | None = None,
+) -> Path:
+    """
+    Write all force plate data to a single Parquet file in wide format.
+
+    Args:
+        forceplates_data: Dict mapping plate name to ForceplateData.
+        path: Output file path.
+        trial_name: If provided, a 'trial_name' column is included.
+
+    Returns:
+        The resolved Path that was written.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = forceplates_to_polars(forceplates_data, format="wide", trial_name=trial_name)
+    df.write_parquet(path)
+    return path
+
+
+def write_events_parquet(
+    events: list[Event],
+    path: Path | str,
+    trial_name: str | None = None,
+) -> Path:
+    """
+    Write events to a Parquet file.
+
+    Args:
+        events: List of Event instances.
+        path: Output file path.
+        trial_name: If provided, a 'trial_name' column is included.
+
+    Returns:
+        The resolved Path that was written.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = events_to_polars(events, trial_name=trial_name)
+    df.write_parquet(path)
+    return path
