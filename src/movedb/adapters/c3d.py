@@ -7,10 +7,6 @@ import numpy as np
 from ..core import AnalogData, Event, ForceplateData, MarkerData, TrialData
 
 
-# TODO:
-class NotFoundError(Exception): ...
-
-
 # TODO: Expected type parameter?
 # TODO: Optimize parameter access especially for indexed parameters
 def get_param_list(c3d: ezc3d.c3d, keys: list[str], default=[]) -> list[Any]:
@@ -228,9 +224,9 @@ def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
     fp_names = [sanitize_fp_name(name) for name in fp_names]
 
     # Get static platform metadata from C3D parameters
-    raw_origins = get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"])
-    raw_corners = get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"])
-    raw_cal_matrices = get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"])
+    raw_origins = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"]))
+    raw_corners = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"]))
+    raw_cal_matrices = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"]))
 
     # Collect per-plate arrays
     forces_list: list[np.ndarray] = []
@@ -258,13 +254,21 @@ def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
         valid_names.append(fp_names[i])
 
         # origin: C3D shape (3, n_platforms) -> per-plate (3,)
-        if raw_origins is not None and hasattr(raw_origins, "shape") and raw_origins.shape[1] > i:
+        if (
+            raw_origins is not None
+            and hasattr(raw_origins, "shape")
+            and raw_origins.shape[1] > i
+        ):
             origin_list.append(raw_origins[:, i].astype(np.float64))
         else:
             origin_list.append(np.zeros(3, dtype=np.float64))
 
         # corners: C3D shape (3, 4, n_platforms) -> per-plate (4, 3)
-        if raw_corners is not None and hasattr(raw_corners, "shape") and raw_corners.shape[2] > i:
+        if (
+            raw_corners is not None
+            and hasattr(raw_corners, "shape")
+            and raw_corners.shape[2] > i
+        ):
             corner_list.append(raw_corners[:, :, i].T.astype(np.float64))
         else:
             corner_list.append(np.zeros((4, 3), dtype=np.float64))
@@ -334,6 +338,7 @@ def extract_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
 
 
 def create_trial(c3d: ezc3d.c3d, name: str) -> TrialData:
+    # TODO: remove fp channels from analogs
     return TrialData(
         name=name,
         markers=extract_markers(c3d),
