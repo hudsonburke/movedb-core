@@ -3,8 +3,15 @@
 import numpy as np
 import polars as pl
 from typing import Any, Literal
-
+from pathlib import Path
 from ..core import AnalogData, Event, ForceplateData, MarkerData
+
+
+def write_parquet(df: pl.DataFrame, path: Path | str) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.write_parquet(path)
+    return path
 
 
 def markers_to_polars(
@@ -188,9 +195,9 @@ def forceplates_to_polars(
     Returns:
         Polars DataFrame in specified format.
     """
-    forces = np.asarray(forceplate_data.forces)    # (n_frames, n_plates, 3)
+    forces = np.asarray(forceplate_data.forces)  # (n_frames, n_plates, 3)
     moments = np.asarray(forceplate_data.moments)  # (n_frames, n_plates, 3)
-    cop = np.asarray(forceplate_data.cop)           # (n_frames, n_plates, 3)
+    cop = np.asarray(forceplate_data.cop)  # (n_frames, n_plates, 3)
     names = forceplate_data.names
     time = np.asarray(forceplate_data.time_vector)
     frames = np.asarray(forceplate_data.frame_vector)
@@ -221,14 +228,24 @@ def forceplates_to_polars(
 
     elif format == "long":
         plate_dfs = []
-        variables = ["force", "force", "force", "moment", "moment", "moment", "cop", "cop", "cop"]
+        variables = [
+            "force",
+            "force",
+            "force",
+            "moment",
+            "moment",
+            "moment",
+            "cop",
+            "cop",
+            "cop",
+        ]
         axes = ["x", "y", "z", "x", "y", "z", "x", "y", "z"]
 
         for i, fp_name in enumerate(names):
             # Stack per-plate forces/moments/cop into (n_frames, 9)
-            all_values = np.column_stack([
-                forces[:, i, :], moments[:, i, :], cop[:, i, :]
-            ])
+            all_values = np.column_stack(
+                [forces[:, i, :], moments[:, i, :], cop[:, i, :]]
+            )
 
             time_repeated = np.repeat(time, 9)
             frame_repeated = np.repeat(frames, 9)
