@@ -1,16 +1,19 @@
 # Core data structures for biomechanical data (pure Pydantic models)
 from .events import Event
 from .trial import TrialData
-from .analogs import AnalogData
-from .markers import MarkerData
-from .forceplates import ForceplateData
-from .session import SessionData
+from .analogs import AnalogData, AnalogMeta
+from .markers import MarkerData, MarkerMeta
+from .forceplates import ForceplateData, ForceplateMeta
+from .session import SignalMeta
 
 __all__ = [
     "AnalogData",
+    "AnalogMeta",
     "Event",
     "ForceplateData",
+    "ForceplateMeta",
     "MarkerData",
-    "SessionData",
+    "MarkerMeta",
+    "SignalMeta",
     "TrialData",
 ]

@@ -12,9 +12,6 @@ from .polars import (
     markers_to_polars,
     write_parquet,
     read_parquet,
-    markers_metadata,
-    analogs_metadata,
-    forceplates_metadata,
 )
 
 __all__ = [
@@ -32,8 +29,4 @@ __all__ = [
     # Parquet I/O
     "write_parquet",
     "read_parquet",
-    # Metadata extraction
-    "markers_metadata",
-    "analogs_metadata",
-    "forceplates_metadata",
 ]

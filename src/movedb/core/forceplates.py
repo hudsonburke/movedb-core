@@ -1,7 +1,9 @@
 import numpy as np
-from typing import Self
-from pydantic import BaseModel, Field, model_validator, PositiveFloat, PositiveInt
+from typing import Literal, Self
+from pydantic import Field, model_validator, PositiveInt
 from functools import cached_property
+
+from .metadata import _MetaBase
 from .shapes import (
     Array1D,
     Array3D,
@@ -15,12 +17,27 @@ from .shapes import (
 )
 
 
-class ForceplateData(BaseModel):
+class ForceplateMeta(_MetaBase):
+    """Metadata for forceplate data, embedded in Parquet file-level metadata."""
+
+    type: Literal["forceplates"] = "forceplates"
+    unit_force: str = Field(default="N", description="Force units")
+    unit_moment: str = Field(default="Nm", description="Moment units")
+    unit_position: str = Field(default="m", description="Position units")
+    origins: NOrigins = Field(
+        description="Origin coordinates of shape (3, n_plates) - xyz per plate"
+    )
+    corners: NCorners = Field(
+        description="Corner coordinates of shape (4, n_plates, 3) - xyz for each corner"
+    )
+    cal_matrices: NCalMatrix = Field(
+        description="Calibration matrices of shape (6, n_plates, 6)"
+    )
+
+
+class ForceplateData(ForceplateMeta):
     """Forceplate data structure."""
 
-    names: list[str] = Field(
-        description="List of force plate names corresponding to second dimension of data arrays"
-    )
     forces: NArray3D = Field(
         description="Force vectors array of shape (n_frames, n_plates, 3) - xyz components"
     )
@@ -30,24 +47,8 @@ class ForceplateData(BaseModel):
     cop: NArray3D = Field(
         description="Center of pressure array of shape (n_frames, n_plates, 3) - xyz coordinates"
     )
-    cal_matrices: NCalMatrix = Field(
-        description="Calibration matrices of shape (6, n_plates, 6)"
-    )
-    corners: NCorners = Field(
-        description="Corner coordinates of shape (4, n_plates, 3) - xyz for each corner"
-    )
-    origins: NOrigins = Field(
-        description="Origin coordinates of shape (3, n_plates) - xyz per plate"
-    )
-    rate: PositiveFloat = Field(description="Sampling rate in Hz")
     first_frame: PositiveInt = Field(
         description="First frame number in the trial", default=1
-    )
-
-    unit_force: str = Field(description="Force units (e.g., 'N')", default="N")
-    unit_moment: str = Field(description="Moment units (e.g., 'Nm')", default="Nm")
-    unit_position: str = Field(
-        description="Position units (e.g., 'm', 'mm')", default="m"
     )
 
     @cached_property
@@ -56,13 +57,6 @@ class ForceplateData(BaseModel):
         return np.concatenate(
             [np.asarray(a) for a in [self.forces, self.moments, self.cop]], axis=2
         )
-
-    def get_index(self, name: str) -> int:
-        """Get the index of a plate by name."""
-        try:
-            return self.names.index(name)
-        except ValueError:
-            raise ValueError(f"Name '{name}' not found in list.")
 
     def get_data(self, name: str) -> Array3D:
         index = self.get_index(name)

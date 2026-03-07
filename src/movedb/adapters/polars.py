@@ -3,14 +3,31 @@
 import json
 import numpy as np
 import polars as pl
-from typing import Any, Literal
+from typing import Any, Literal, Annotated, Union
 from pathlib import Path
-from ..core import AnalogData, Event, ForceplateData, MarkerData
+from pydantic import Discriminator
+from ..core import (
+    AnalogData,
+    Event,
+    ForceplateData,
+    MarkerData,
+    AnalogMeta,
+    ForceplateMeta,
+    MarkerMeta,
+)
 
-
-# ---------------------------------------------------------------------------
-# Parquet I/O
-# ---------------------------------------------------------------------------
+# Discriminated union of all signal metadata types.
+# Used as Parquet file-level metadata: the ``type`` field determines
+# which concrete metadata model to instantiate on read.
+#
+# Usage:
+#   from pydantic import TypeAdapter
+#   ta = TypeAdapter(SignalMeta)
+#   meta = ta.validate_python(raw_dict)   # -> MarkerMeta | AnalogMeta | ForceplateMeta
+SignalMeta = Annotated[
+    Union[MarkerMeta, AnalogMeta, ForceplateMeta],
+    Discriminator("type"),
+]
 
 
 def write_parquet(
@@ -54,46 +71,6 @@ def read_parquet(path: Path | str) -> tuple[pl.DataFrame, dict[str, Any] | None]
     file_meta = pl.read_parquet_metadata(path)
     movedb_meta = json.loads(file_meta["movedb"]) if "movedb" in file_meta else None
     return df, movedb_meta
-
-
-# ---------------------------------------------------------------------------
-# Metadata extraction
-# ---------------------------------------------------------------------------
-
-
-def markers_metadata(marker_data: MarkerData) -> dict[str, Any]:
-    """Extract metadata needed to reconstruct a MarkerData from its DataFrame."""
-    return {
-        "type": "markers",
-        "rate": marker_data.rate,
-        "units": marker_data.units,
-        "names": marker_data.names,
-    }
-
-
-def analogs_metadata(analog_data: AnalogData) -> dict[str, Any]:
-    """Extract metadata needed to reconstruct an AnalogData from its DataFrame."""
-    return {
-        "type": "analogs",
-        "rate": analog_data.rate,
-        "units": analog_data.units,
-        "names": analog_data.names,
-    }
-
-
-def forceplates_metadata(forceplate_data: ForceplateData) -> dict[str, Any]:
-    """Extract metadata needed to reconstruct a ForceplateData from its DataFrame."""
-    return {
-        "type": "forceplates",
-        "rate": forceplate_data.rate,
-        "names": forceplate_data.names,
-        "unit_force": forceplate_data.unit_force,
-        "unit_moment": forceplate_data.unit_moment,
-        "unit_position": forceplate_data.unit_position,
-        "origins": np.asarray(forceplate_data.origins).tolist(),
-        "corners": np.asarray(forceplate_data.corners).tolist(),
-        "cal_matrices": np.asarray(forceplate_data.cal_matrices).tolist(),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -262,9 +239,9 @@ def forceplates_to_polars(
     Returns:
         Polars DataFrame in specified format.
     """
-    forces = np.asarray(forceplate_data.forces)    # (n_frames, n_plates, 3)
+    forces = np.asarray(forceplate_data.forces)  # (n_frames, n_plates, 3)
     moments = np.asarray(forceplate_data.moments)  # (n_frames, n_plates, 3)
-    cop = np.asarray(forceplate_data.cop)           # (n_frames, n_plates, 3)
+    cop = np.asarray(forceplate_data.cop)  # (n_frames, n_plates, 3)
     names = forceplate_data.names
     time = np.asarray(forceplate_data.time_vector)
     frames = np.asarray(forceplate_data.frame_vector)
@@ -306,17 +283,27 @@ def forceplates_to_polars(
 
     elif format == "long":
         variables = [
-            "force", "force", "force",
-            "moment", "moment", "moment",
-            "cop", "cop", "cop",
+            "force",
+            "force",
+            "force",
+            "moment",
+            "moment",
+            "moment",
+            "cop",
+            "cop",
+            "cop",
         ]
         axes = ["x", "y", "z", "x", "y", "z", "x", "y", "z"]
 
         plate_dfs: list[pl.DataFrame] = []
         for i, fp_name in enumerate(names):
-            all_values = np.column_stack([
-                forces[:, i, :], moments[:, i, :], cop[:, i, :],
-            ])  # (n_frames, 9)
+            all_values = np.column_stack(
+                [
+                    forces[:, i, :],
+                    moments[:, i, :],
+                    cop[:, i, :],
+                ]
+            )  # (n_frames, 9)
 
             time_repeated = np.repeat(time, 9)
             frame_repeated = np.repeat(frames, 9)

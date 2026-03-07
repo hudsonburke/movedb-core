@@ -1,21 +1,26 @@
 import numpy as np
 from functools import cached_property
-from pydantic import BaseModel, Field, PositiveInt, PositiveFloat, model_validator
-from typing import Self
+from typing import Literal, Self
+
+from pydantic import Field, PositiveInt, model_validator
+
+from .metadata import _MetaBase
 from .shapes import Array1D, NArray1D, Array3D, NArray3D
 
 
-class MarkerData(BaseModel):
+class MarkerMeta(_MetaBase):
+    """Metadata for marker data, embedded in Parquet file-level metadata."""
+
+    type: Literal["markers"] = "markers"
+    units: str = Field(description="Position units (e.g., 'mm', 'm')")
+
+
+class MarkerData(MarkerMeta):
     """Marker trajectory data structure."""
 
     data: NArray3D = Field(
         description="Marker positions array of shape (n_frames, n_markers, 3) - xyz coordinates"
     )
-    names: list[str] = Field(
-        description="List of marker names corresponding to second dimension of data"
-    )
-    rate: PositiveFloat = Field(description="Sampling rate in Hz")
-    units: str = Field(description="Position units (e.g., 'mm', 'm')")
     first_frame: PositiveInt = Field(
         description="First frame number in the trial", default=1
     )
@@ -23,13 +28,6 @@ class MarkerData(BaseModel):
         description="Optional residuals array of shape (n_frames, n_markers)",
         default=None,
     )
-
-    def get_index(self, marker_name: str) -> int:
-        """Get the index of a marker by name."""
-        try:
-            return self.names.index(marker_name)
-        except ValueError:
-            raise ValueError(f"Marker name '{marker_name}' not found in names.")
 
     def get_data(self, marker_name: str) -> Array3D:
         index = self.get_index(marker_name)

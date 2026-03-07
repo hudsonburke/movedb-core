@@ -1,29 +1,27 @@
 import numpy as np
 from functools import cached_property
-from pydantic import BaseModel, Field, model_validator, PositiveInt, PositiveFloat
-from typing import Self
+from typing import Literal, Self
+
+from pydantic import Field, PositiveInt, model_validator
+
+from .metadata import _MetaBase
 from .shapes import Array1D, NArray1D
 
 
-class AnalogData(BaseModel):
+class AnalogMeta(_MetaBase):
+    """Metadata for analog data, embedded in Parquet file-level metadata."""
+
+    type: Literal["analogs"] = "analogs"
+    units: str = Field(description="Signal units (e.g., 'V', 'mV')")
+
+
+class AnalogData(AnalogMeta):
     """Analog signal data structure."""
 
-    names: list[str] = Field(
-        description="List of channel names corresponding to second dimension of data"
-    )
     data: NArray1D = Field(
         description="Analog signals array of shape (n_frames, n_channels)"
     )
-    rate: PositiveFloat = Field(description="Sampling rate in Hz")
-    units: str = Field(description="Signal units (e.g., 'V', 'mV')")
     first_frame: PositiveInt = Field(description="First frame number in the trial")
-
-    def get_index(self, name: str) -> int:
-        """Get the index of a channel by name."""
-        try:
-            return self.names.index(name)
-        except ValueError:
-            raise ValueError(f"Name '{name}' not found in name list.")
 
     def get_data(self, name: str) -> Array1D:
         index = self.get_index(name)
