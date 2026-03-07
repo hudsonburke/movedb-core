@@ -13,6 +13,11 @@ from .polars import (
     write_parquet,
     read_parquet,
 )
+from .parameters import (
+    extract_parameters,
+    write_parameters,
+    read_parameters,
+)
 
 __all__ = [
     # C3D extraction
@@ -29,4 +34,8 @@ __all__ = [
     # Parquet I/O
     "write_parquet",
     "read_parquet",
+    # Parameters
+    "extract_parameters",
+    "write_parameters",
+    "read_parameters",
 ]

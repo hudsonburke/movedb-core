@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Literal, Self
-from pydantic import Field, model_validator, PositiveInt
+from pydantic import Field, model_validator
 from functools import cached_property
 
 from .metadata import _MetaBase
@@ -47,8 +47,9 @@ class ForceplateData(ForceplateMeta):
     cop: NArray3D = Field(
         description="Center of pressure array of shape (n_frames, n_plates, 3) - xyz coordinates"
     )
-    first_frame: PositiveInt = Field(
-        description="First frame number in the trial", default=1
+    free_moment: NArray3D | None = Field(
+        default=None,
+        description="Optional free moment at center of pressure array of shape (n_frames, n_plates, 3)",
     )
 
     @cached_property
@@ -90,6 +91,11 @@ class ForceplateData(ForceplateMeta):
     def dims_must_match(self) -> Self:
         forces = np.asarray(self.forces)
         force_frames, n_forces, _ = forces.shape
+        if len(self.names) != n_forces:
+            raise ValueError(
+                f"Mismatch: {len(self.names)} plate names provided, "
+                f"but data arrays have {n_forces} plates."
+            )
 
         moments = np.asarray(self.moments)
         moment_frames, n_moments, _ = moments.shape
@@ -111,10 +117,15 @@ class ForceplateData(ForceplateMeta):
             raise ValueError(
                 f"Number of CoP plates {n_cop} does not match number of force plates {n_forces}."
             )
-
-        if len(self.names) != n_forces:
-            raise ValueError(
-                f"Mismatch: {len(self.names)} plate names provided, "
-                f"but data arrays have {n_forces} plates."
-            )
+        if self.free_moment is not None:
+            free_moment = np.asarray(self.free_moment)
+            free_moment_frames, n_free_moment, _ = free_moment.shape
+            if free_moment_frames != force_frames:
+                raise ValueError(
+                    f"Free moment frames {free_moment_frames} do not match forces frames {force_frames}."
+                )
+            if n_free_moment != n_forces:
+                raise ValueError(
+                    f"Number of free moment plates {n_free_moment} does not match number of force plates {n_forces}."
+                )
         return self

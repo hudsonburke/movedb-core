@@ -201,6 +201,7 @@ def extract_analog_rate(c3d: ezc3d.c3d) -> float:
 def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
     """
     Extract force plate data from the C3D file.
+    Relies heavily on ezc3d's platform parsing, which organizes data by platform and provides force, moment, and cop arrays.
 
     Returns a single ForceplateData container with stacked arrays:
         - forces, moments, cop: (n_frames, n_plates, 3)
@@ -212,7 +213,7 @@ def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
     if not platforms:
         raise ValueError("No platform data found.")
 
-    n_platforms = len(platforms)
+    n_platforms = len(platforms)  # or USED
 
     # Determine forceplate names
     analog_descriptions: list[str] = get_param_list(c3d, ["ANALOG", "DESCRIPTIONS"])
@@ -312,20 +313,20 @@ def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
     )
 
 
-def extract_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
+def extract_processing_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
     """
     Extract PROCESSING parameters from the C3D file.
 
     The PROCESSING group is used by Vicon (and some other systems)
     to store subject-specific parameters like mass, height, and
-    marker-placement offsets. These are session-level metadata.
+    marker-placement offsets.
 
     Returns:
         Dictionary of parameter name -> value.
     """
     parameters: dict[str, Any] = {}
     if "PROCESSING" not in c3d.parameters:
-        return parameters
+        raise ValueError("C3D object does not contain PROCESSING parameters")
 
     for key, value in c3d.parameters["PROCESSING"].items():
         arr = value.get("value", None)

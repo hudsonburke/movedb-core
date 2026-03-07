@@ -2,7 +2,7 @@ import numpy as np
 from functools import cached_property
 from typing import Literal, Self
 
-from pydantic import Field, PositiveInt, model_validator
+from pydantic import Field, model_validator
 
 from .metadata import _MetaBase
 from .shapes import Array1D, NArray1D
@@ -21,7 +21,6 @@ class AnalogData(AnalogMeta):
     data: NArray1D = Field(
         description="Analog signals array of shape (n_frames, n_channels)"
     )
-    first_frame: PositiveInt = Field(description="First frame number in the trial")
 
     def get_data(self, name: str) -> Array1D:
         index = self.get_index(name)

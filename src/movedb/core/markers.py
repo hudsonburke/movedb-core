@@ -2,7 +2,7 @@ import numpy as np
 from functools import cached_property
 from typing import Literal, Self
 
-from pydantic import Field, PositiveInt, model_validator
+from pydantic import Field, model_validator
 
 from .metadata import _MetaBase
 from .shapes import Array1D, NArray1D, Array3D, NArray3D
@@ -20,9 +20,6 @@ class MarkerData(MarkerMeta):
 
     data: NArray3D = Field(
         description="Marker positions array of shape (n_frames, n_markers, 3) - xyz coordinates"
-    )
-    first_frame: PositiveInt = Field(
-        description="First frame number in the trial", default=1
     )
     residuals: NArray1D | None = Field(
         description="Optional residuals array of shape (n_frames, n_markers)",
