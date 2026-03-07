@@ -26,7 +26,7 @@ def markers_to_polars(
         Polars DataFrame in specified format.
     """
     data = np.asarray(marker_data.data)  # (n_frames, n_markers, 3)
-    marker_names = marker_data.marker_names
+    marker_names = marker_data.names
     rate = marker_data.rate
     first_frame = marker_data.first_frame
 
@@ -172,89 +172,84 @@ def forceplates_to_polars(
     """
     Convert force plate data to Polars DataFrame.
 
+    The ForceplateData model stores stacked arrays with shape (n_frames, n_plates, 3).
+    This function iterates over plates and produces a single DataFrame with all plates
+    discriminated by a ``fp_name`` column.
+
     Args:
-        forceplate_data: ForceplateData instance.
+        forceplate_data: ForceplateData instance (multi-plate container).
         format: Output format
-            - 'long': One row per (frame, component) with columns [time, frame, variable, axis, value]
-            - 'wide': One row per frame with columns [time, frame, force_x, ..., cop_z]
-        trial_name: If provided, a 'trial_name' column is added (used for session-level files).
+            - 'wide': One row per (frame, plate) with columns
+              [time, frame, fp_name, force_x, …, cop_z]
+            - 'long': One row per (frame, plate, variable, axis) with columns
+              [time, frame, fp_name, variable, axis, value]
+        trial_name: If provided, a 'trial_name' column is added.
 
     Returns:
         Polars DataFrame in specified format.
     """
-    forces = np.asarray(forceplate_data.forces)
-    moments = np.asarray(forceplate_data.moments)
-    cop = np.asarray(forceplate_data.cop)
-    rate = forceplate_data.rate
-
-    n_frames = forces.shape[0]
-    time = np.arange(n_frames) / rate
-    frames = np.arange(n_frames)
+    forces = np.asarray(forceplate_data.forces)    # (n_frames, n_plates, 3)
+    moments = np.asarray(forceplate_data.moments)  # (n_frames, n_plates, 3)
+    cop = np.asarray(forceplate_data.cop)           # (n_frames, n_plates, 3)
+    names = forceplate_data.names
+    time = np.asarray(forceplate_data.time_vector)
+    frames = np.asarray(forceplate_data.frame_vector)
+    n_frames = forceplate_data.num_frames
 
     if format == "wide":
-        df_dict: dict[str, Any] = {
-            "time": time,
-            "frame": frames,
-            "fp_name": [name] * n_frames,
-        }
-
-        if trial_name is not None:
-            df_dict["trial_name"] = [trial_name] * n_frames
-
-        df_dict.update(
-            {
-                "force_x": forces[:, 0],
-                "force_y": forces[:, 1],
-                "force_z": forces[:, 2],
-                "moment_x": moments[:, 0],
-                "moment_y": moments[:, 1],
-                "moment_z": moments[:, 2],
-                "cop_x": cop[:, 0],
-                "cop_y": cop[:, 1],
-                "cop_z": cop[:, 2],
+        plate_dfs: list[pl.DataFrame] = []
+        for i, fp_name in enumerate(names):
+            df_dict: dict[str, Any] = {
+                "time": time,
+                "frame": frames,
+                "fp_name": [fp_name] * n_frames,
+                "force_x": forces[:, i, 0],
+                "force_y": forces[:, i, 1],
+                "force_z": forces[:, i, 2],
+                "moment_x": moments[:, i, 0],
+                "moment_y": moments[:, i, 1],
+                "moment_z": moments[:, i, 2],
+                "cop_x": cop[:, i, 0],
+                "cop_y": cop[:, i, 1],
+                "cop_z": cop[:, i, 2],
             }
-        )
+            if trial_name is not None:
+                df_dict["trial_name"] = [trial_name] * n_frames
+            plate_dfs.append(pl.DataFrame(df_dict))
 
-        return pl.DataFrame(df_dict)
+        return pl.concat(plate_dfs)
 
     elif format == "long":
-        # Long format: one row per (frame, variable, axis)
-        time_repeated = np.repeat(time, 9)  # 3 variables * 3 axes
-        frame_repeated = np.repeat(frames, 9)
-        fp_name_repeated = [name] * (n_frames * 9)
-
-        variables = [
-            "force",
-            "force",
-            "force",
-            "moment",
-            "moment",
-            "moment",
-            "cop",
-            "cop",
-            "cop",
-        ]
+        plate_dfs = []
+        variables = ["force", "force", "force", "moment", "moment", "moment", "cop", "cop", "cop"]
         axes = ["x", "y", "z", "x", "y", "z", "x", "y", "z"]
 
-        variable_repeated = np.tile(variables, n_frames)
-        axis_repeated = np.tile(axes, n_frames)
+        for i, fp_name in enumerate(names):
+            # Stack per-plate forces/moments/cop into (n_frames, 9)
+            all_values = np.column_stack([
+                forces[:, i, :], moments[:, i, :], cop[:, i, :]
+            ])
 
-        all_values = np.column_stack([forces, moments, cop])  # (n_frames, 9)
-        values = all_values.flatten()
+            time_repeated = np.repeat(time, 9)
+            frame_repeated = np.repeat(frames, 9)
 
-        df_dict = {
-            "time": time_repeated,
-            "frame": frame_repeated,
-            "fp_name": fp_name_repeated,
-            "variable": variable_repeated,
-            "axis": axis_repeated,
-            "value": values,
-        }
+            variable_repeated = np.tile(variables, n_frames)
+            axis_repeated = np.tile(axes, n_frames)
+            values = all_values.flatten()
 
-        if trial_name is not None:
-            df_dict["trial_name"] = [trial_name] * len(time_repeated)
+            df_dict = {
+                "time": time_repeated,
+                "frame": frame_repeated,
+                "fp_name": [fp_name] * (n_frames * 9),
+                "variable": variable_repeated,
+                "axis": axis_repeated,
+                "value": values,
+            }
+            if trial_name is not None:
+                df_dict["trial_name"] = [trial_name] * (n_frames * 9)
+            plate_dfs.append(pl.DataFrame(df_dict))
 
-        return pl.DataFrame(df_dict)
+        return pl.concat(plate_dfs)
 
     else:
         raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")

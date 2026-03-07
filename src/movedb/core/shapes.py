@@ -1,18 +1,6 @@
 import numpy as np
 from numpydantic import NDArray
 from typing import Literal  # Better for static type checking than numpydantic.Shape
-from dataclasses import dataclass
-
-
-@dataclass
-class Vec3:
-    x: float
-    y: float
-    z: float
-
-
-@dataclass
-class Vec3Array: ...
 
 
 # Common

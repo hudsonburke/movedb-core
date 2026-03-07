@@ -110,7 +110,7 @@ def extract_markers(c3d: ezc3d.c3d) -> MarkerData:
 
     return MarkerData(
         data=np.transpose(raw_points[:3, :, :], (2, 1, 0)).astype(np.float64),
-        marker_names=get_param_list(c3d, ["POINT", "LABELS"], default=[]),
+        names=get_param_list(c3d, ["POINT", "LABELS"], default=[]),
         rate=float(get_param(c3d, ["POINT", "RATE"], default=0.0)),
         units=get_param(c3d, ["POINT", "UNITS"], index=0, default="mm"),
         first_frame=int(c3d.header["points"]["first_frame"]),
@@ -133,7 +133,7 @@ def extract_analogs(c3d: ezc3d.c3d) -> AnalogData:
 
     return AnalogData(
         data=raw_analogs[0, :, :].T.astype(np.float64),
-        channel_names=get_param_list(c3d, ["ANALOG", "LABELS"], default=[]),
+        names=get_param_list(c3d, ["ANALOG", "LABELS"], default=[]),
         rate=float(get_param(c3d, ["ANALOG", "RATE"], default=0.0)),
         units=get_param(c3d, ["ANALOG", "UNITS"], index=0, default="V"),
         first_frame=int(c3d.header["points"]["first_frame"]),
@@ -202,11 +202,15 @@ def extract_analog_rate(c3d: ezc3d.c3d) -> float:
     return analog_rate
 
 
-# TODO: Turn this into one object instead of dict
-def extract_forceplates(c3d: ezc3d.c3d) -> dict[str, ForceplateData]:
+def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
     """
     Extract force plate data from the C3D file.
 
+    Returns a single ForceplateData container with stacked arrays:
+        - forces, moments, cop: (n_frames, n_plates, 3)
+        - origins: (3, n_plates)
+        - corners: (4, n_plates, 3)
+        - cal_matrices: (6, n_plates, 6)
     """
     platforms = c3d.data.get("platform")
     if not platforms:
@@ -216,68 +220,92 @@ def extract_forceplates(c3d: ezc3d.c3d) -> dict[str, ForceplateData]:
 
     # Determine forceplate names
     analog_descriptions: list[str] = get_param_list(c3d, ["ANALOG", "DESCRIPTIONS"])
-    fp_names = _extract_forceplate_names(analog_descriptions)
+    fp_names = _extract_forceplate_names(c3d, analog_descriptions)
 
     if not fp_names or len(fp_names) != n_platforms:
         fp_names = [f"FP_{i}" for i in range(n_platforms)]
 
     fp_names = [sanitize_fp_name(name) for name in fp_names]
 
-    # Get static platform metadata
-    origins = get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"])
-    corners = get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"])
-    cal_matrices = get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"])
+    # Get static platform metadata from C3D parameters
+    raw_origins = get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"])
+    raw_corners = get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"])
+    raw_cal_matrices = get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"])
 
-    result: dict[str, ForceplateData] = {}
+    # Collect per-plate arrays
+    forces_list: list[np.ndarray] = []
+    moments_list: list[np.ndarray] = []
+    cop_list: list[np.ndarray] = []
+    origin_list: list[np.ndarray] = []
+    corner_list: list[np.ndarray] = []
+    cal_list: list[np.ndarray] = []
+    valid_names: list[str] = []
 
     for i, platform in enumerate(platforms):
         # ezc3d platform dict has keys: 'force', 'moment', 'center_of_pressure'
         # Each is shape (3, 1, n_frames)
-        forces_raw = platform.get("force")  # (3, 1, n_frames)
-        moments_raw = platform.get("moment")  # (3, 1, n_frames)
-        cop_raw = platform.get("center_of_pressure")  # (3, 1, n_frames)
+        forces_raw = platform.get("force")
+        moments_raw = platform.get("moment")
+        cop_raw = platform.get("center_of_pressure")
 
         if forces_raw is None or moments_raw is None or cop_raw is None:
             continue
 
         # Reshape: (3, 1, n_frames) -> (n_frames, 3)
-        forces = forces_raw[:, 0, :].T.astype(np.float64)
-        moments = moments_raw[:, 0, :].T.astype(np.float64)
-        cop = cop_raw[:, 0, :].T.astype(np.float64)
+        forces_list.append(forces_raw[:, 0, :].T.astype(np.float64))
+        moments_list.append(moments_raw[:, 0, :].T.astype(np.float64))
+        cop_list.append(cop_raw[:, 0, :].T.astype(np.float64))
+        valid_names.append(fp_names[i])
 
-        # Extract per-platform metadata
-        # origin: shape (3, n_platforms) in the C3D parameter
-        if origins is not None and origins.shape[1] > i:
-            origin = origins[:, i].astype(np.float64)
+        # origin: C3D shape (3, n_platforms) -> per-plate (3,)
+        if raw_origins is not None and hasattr(raw_origins, "shape") and raw_origins.shape[1] > i:
+            origin_list.append(raw_origins[:, i].astype(np.float64))
         else:
-            origin = np.zeros(3, dtype=np.float64)
+            origin_list.append(np.zeros(3, dtype=np.float64))
 
-        # corners: shape (3, 4, n_platforms)
-        if corners is not None and corners.shape[2] > i:
-            corner = corners[:, :, i].T.astype(np.float64)  # (4, 3)
+        # corners: C3D shape (3, 4, n_platforms) -> per-plate (4, 3)
+        if raw_corners is not None and hasattr(raw_corners, "shape") and raw_corners.shape[2] > i:
+            corner_list.append(raw_corners[:, :, i].T.astype(np.float64))
         else:
-            corner = np.zeros((4, 3), dtype=np.float64)
+            corner_list.append(np.zeros((4, 3), dtype=np.float64))
 
-        # cal_matrix: shape (6, 6, n_platforms) or may not exist
+        # cal_matrix: C3D shape (6, 6, n_platforms) -> per-plate (6, 6)
         if (
-            cal_matrices is not None
-            and cal_matrices.ndim == 3
-            and cal_matrices.shape[2] > i
+            raw_cal_matrices is not None
+            and hasattr(raw_cal_matrices, "ndim")
+            and raw_cal_matrices.ndim == 3
+            and raw_cal_matrices.shape[2] > i
         ):
-            cal = cal_matrices[:, :, i].astype(np.float64)  # (6, 6)
+            cal_list.append(raw_cal_matrices[:, :, i].astype(np.float64))
         else:
-            cal = np.eye(6, dtype=np.float64)
+            cal_list.append(np.eye(6, dtype=np.float64))
 
-        result[fp_names[i]] = ForceplateData(
-            forces=forces,
-            moments=moments,
-            cop=cop,
-            cal_matrix=cal,
-            corners=corner,
-            origin=origin,
-            rate=extract_analog_rate(c3d),
-        )
-    return result
+    if not forces_list:
+        raise ValueError("No valid force plate data found.")
+
+    # Stack into multi-plate arrays
+    # Data: per-plate (n_frames, 3) -> stacked (n_frames, n_plates, 3)
+    forces = np.stack(forces_list, axis=1)
+    moments = np.stack(moments_list, axis=1)
+    cop = np.stack(cop_list, axis=1)
+
+    # Metadata: origins (3,) per plate -> (3, n_plates)
+    origins = np.stack(origin_list, axis=1)
+    # corners (4, 3) per plate -> (4, n_plates, 3)
+    corners = np.stack(corner_list, axis=1)
+    # cal_matrices (6, 6) per plate -> (6, n_plates, 6)
+    cal_matrices = np.stack(cal_list, axis=1)
+
+    return ForceplateData(
+        names=valid_names,
+        forces=forces,
+        moments=moments,
+        cop=cop,
+        origins=origins,
+        corners=corners,
+        cal_matrices=cal_matrices,
+        rate=extract_analog_rate(c3d),
+    )
 
 
 def extract_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
@@ -305,10 +333,9 @@ def extract_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
     return parameters
 
 
-def create_trial(c3d: ezc3d.c3d, name: str, trial_type: str) -> TrialData:
+def create_trial(c3d: ezc3d.c3d, name: str) -> TrialData:
     return TrialData(
         name=name,
-        trial_type=trial_type,
         markers=extract_markers(c3d),
         analogs=extract_analogs(c3d),
         forceplates=extract_forceplates(c3d),

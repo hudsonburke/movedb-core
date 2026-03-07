@@ -65,7 +65,7 @@ def write_forceplates_parquet(
     Write all force plate data to a single Parquet file in wide format.
 
     Args:
-        forceplates_data: Dict mapping plate name to ForceplateData.
+        forceplates_data: ForceplateData instance (multi-plate container).
         path: Output file path.
         trial_name: If provided, a 'trial_name' column is included.
 

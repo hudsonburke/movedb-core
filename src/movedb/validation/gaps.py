@@ -1,4 +1,4 @@
-from ..models.trial import Trial
+from ..core import TrialData
 from datetime import timedelta
 import polars as pl
 from pydantic.dataclasses import dataclass
@@ -218,4 +218,3 @@ def find_markers_with_gaps(trial: Trial, min_gap_percentage: float = 0.0) -> lis
         for marker_result in result.marker_results
         if marker_result.gap_percentage >= min_gap_percentage
     ]
-
