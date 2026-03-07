@@ -7,6 +7,8 @@ from .polars import (
 from ..core import MarkerData, AnalogData, ForceplateData, Event
 from pathlib import Path
 
+# TODO: This can definitely be simplified
+
 
 def write_markers_parquet(
     marker_data: MarkerData,
@@ -55,7 +57,7 @@ def write_analogs_parquet(
 
 
 def write_forceplates_parquet(
-    forceplates_data: dict[str, ForceplateData],
+    forceplates_data: ForceplateData,
     path: Path | str,
     trial_name: str | None = None,
 ) -> Path:

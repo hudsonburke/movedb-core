@@ -88,6 +88,7 @@ def extract_event(c3d: ezc3d.c3d, index: int) -> Event:
     )
 
 
+# TODO: use param list
 def extract_events(c3d: ezc3d.c3d) -> list[Event]:
     labels = get_param(c3d, ["EVENT", "LABELS"], default=[])
     return [extract_event(c3d, i) for i in range(len(labels))]

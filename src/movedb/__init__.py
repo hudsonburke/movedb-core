@@ -9,11 +9,11 @@ MoveDB provides tools for:
 """
 
 from . import core
-from . import io
+from . import adapters
 
 
 # Main exports
 __all__ = [
     "core",
-    "io",
+    "adapters",
 ]

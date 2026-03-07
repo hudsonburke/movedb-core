@@ -7,6 +7,7 @@ from typing import Callable, Any, Type, TypeVar
 h5.get_config().track_order = True
 
 
+# TODO: Clean up or get rid of this mess
 class H5LoadRegistry:
     def __init__(self):
         self.type_map: dict[type, Callable] = {

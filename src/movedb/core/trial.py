@@ -11,26 +11,16 @@ from .forceplates import ForceplateData
 class TrialData(BaseModel):
     """
     Complete data for a single biomechanical trial.
-
-    Composes signal data (markers, analogs, forceplates) with
-    event annotations and lightweight metadata. Contains no
-    database or storage references — purely in-memory data.
     """
 
     name: str = Field(description="Trial name (e.g., 'Walk_01')")
-    trial_type: str = Field(
-        default="",
-        description="Type of trial (e.g., 'static', 'walking', 'running')",
-    )  # TODO: Rethink this
-
     # Signal data
     markers: MarkerData | None = Field(
         default=None, description="Marker trajectory data"
     )
     analogs: AnalogData | None = Field(default=None, description="Analog channel data")
-    forceplates: dict[str, ForceplateData] = Field(
-        default_factory=dict,
-        description="Force plate data keyed by plate name",
+    forceplates: ForceplateData | None = Field(
+        default=None, description="Force plate data"
     )
 
     # Events

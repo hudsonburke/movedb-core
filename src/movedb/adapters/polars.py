@@ -25,7 +25,7 @@ def markers_to_polars(
     Returns:
         Polars DataFrame in specified format.
     """
-    data = marker_data.data  # (n_frames, n_markers, 3)
+    data = np.asarray(marker_data.data)  # (n_frames, n_markers, 3)
     marker_names = marker_data.marker_names
     rate = marker_data.rate
     first_frame = marker_data.first_frame
@@ -59,7 +59,7 @@ def markers_to_polars(
             df_dict["trial_name"] = [trial_name] * len(time_repeated)
 
         # Add residuals if present
-        residuals = marker_data.residuals
+        residuals = np.asarray(marker_data.residuals)
         if residuals is not None:
             df_dict["residual"] = residuals.flatten()
 
@@ -82,7 +82,7 @@ def markers_to_polars(
             df_dict[f"{marker_name}_z"] = data[:, i, 2]
 
         # Add residuals if present
-        residuals = marker_data.residuals
+        residuals = np.asarray(marker_data.residuals)
         if residuals is not None:
             for i, marker_name in enumerate(marker_names):
                 df_dict[f"{marker_name}_residual"] = residuals[:, i]
@@ -111,8 +111,8 @@ def analogs_to_polars(
     Returns:
         Polars DataFrame in specified format.
     """
-    data = analog_data.data  # (n_frames, n_channels)
-    channel_names = analog_data.channel_names
+    data = np.asarray(analog_data.data)  # (n_frames, n_channels)
+    channel_names = analog_data.names
     rate = analog_data.rate
     first_frame = analog_data.first_frame
 
@@ -164,9 +164,8 @@ def analogs_to_polars(
         raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")
 
 
-def forceplate_to_polars(
+def forceplates_to_polars(
     forceplate_data: ForceplateData,
-    name: str,
     format: Literal["long", "wide"] = "wide",
     trial_name: str | None = None,
 ) -> pl.DataFrame:
@@ -175,7 +174,6 @@ def forceplate_to_polars(
 
     Args:
         forceplate_data: ForceplateData instance.
-        name: Name/identifier of the force plate.
         format: Output format
             - 'long': One row per (frame, component) with columns [time, frame, variable, axis, value]
             - 'wide': One row per frame with columns [time, frame, force_x, ..., cop_z]
@@ -184,9 +182,9 @@ def forceplate_to_polars(
     Returns:
         Polars DataFrame in specified format.
     """
-    forces = forceplate_data.forces  # (n_frames, 3)
-    moments = forceplate_data.moments  # (n_frames, 3)
-    cop = forceplate_data.cop  # (n_frames, 3)
+    forces = np.asarray(forceplate_data.forces)
+    moments = np.asarray(forceplate_data.moments)
+    cop = np.asarray(forceplate_data.cop)
     rate = forceplate_data.rate
 
     n_frames = forces.shape[0]
@@ -260,35 +258,6 @@ def forceplate_to_polars(
 
     else:
         raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")
-
-
-def forceplates_to_polars(
-    forceplates_data: dict[str, ForceplateData],
-    format: Literal["long", "wide"] = "wide",
-    trial_name: str | None = None,
-) -> pl.DataFrame:
-    """
-    Convert multiple force plate data to a single Polars DataFrame.
-
-    Args:
-        forceplates_data: Dictionary mapping force plate names to ForceplateData.
-        format: Output format ('long' or 'wide').
-        trial_name: If provided, a 'trial_name' column is added (used for session-level files).
-
-    Returns:
-        Combined Polars DataFrame with all force plates.
-    """
-    dfs = []
-    for name, fp_data in forceplates_data.items():
-        df = forceplate_to_polars(
-            fp_data, name=name, format=format, trial_name=trial_name
-        )
-        dfs.append(df)
-
-    if not dfs:
-        return pl.DataFrame()
-
-    return pl.concat(dfs)
 
 
 def events_to_polars(
