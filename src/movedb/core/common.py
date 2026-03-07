@@ -1,7 +1,7 @@
 import numpy as np
 from pydantic import PositiveInt, PositiveFloat
 from numpydantic import NDArray
-from typing import Literal
+from typing import Literal  # Better for static type checking than numpydantic.Shape
 from dataclasses import dataclass
 
 

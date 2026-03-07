@@ -1,11 +1,6 @@
 import numpy as np
 from typing import Literal
-from pydantic import (
-    BaseModel,
-    Field,
-    model_validator,
-    PositiveFloat,
-)
+from pydantic import BaseModel, Field, model_validator, PositiveFloat
 from numpydantic import NDArray
 
 Array3D = NDArray[Literal["* frames, 3 xyz"], np.float64]
@@ -15,9 +10,11 @@ Corners = NDArray[Literal["4 corners, 3 xyz"], np.float64]
 CalMatrix = NDArray[Literal["6 rows, 6 columns"], np.float64]
 
 
+# TODO: Make this more akin to marker and analog data access structure
 class ForceplateData(BaseModel):
     """Force plate data structure."""
 
+    fp_names: list[str] = Field()
     forces: Array3D = Field(
         description="Force vectors array of shape (n_frames, 3) - xyz components"
     )
@@ -57,3 +54,5 @@ class ForceplateData(BaseModel):
                 f"CoP frames {cop_frames} do not match forces frames {force_frames}."
             )
         return self
+
+    def flatten(self): ...

@@ -1,14 +1,8 @@
 import numpy as np
 from functools import cached_property
-from pydantic import (
-    BaseModel,
-    Field,
-    PositiveInt,
-    PositiveFloat,
-    model_validator,
-)
+from pydantic import BaseModel, Field, PositiveInt, PositiveFloat, model_validator
 from numpydantic import NDArray
-from typing import Literal  # Better for static type checking than numpydantic.Shape
+from typing import Literal
 
 SingleMarkerArray = NDArray[Literal["* frames, 3 xyz"], np.float64]
 MarkerArray = NDArray[Literal["* frames, * markers, 3 xyz"], np.float64]

@@ -1,14 +1,8 @@
 import numpy as np
 from functools import cached_property
-from pydantic import (
-    BaseModel,
-    Field,
-    model_validator,
-    PositiveInt,
-    PositiveFloat,
-)
+from pydantic import BaseModel, Field, model_validator, PositiveInt, PositiveFloat
 from numpydantic import NDArray
-from typing import Literal  # Better for static type checking than numpydantic.Shape
+from typing import Literal
 
 AnalogArray = NDArray[Literal["* frames, * channels"], np.float64]
 Array1D = NDArray[Literal["* frames"], np.float64]
