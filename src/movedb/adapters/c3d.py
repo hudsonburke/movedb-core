@@ -1,53 +1,73 @@
 """Functions for reading C3D files and producing pure Pydantic data models."""
 
-import re
 from typing import Any
+
 import ezc3d
 import numpy as np
+
 from ..core import AnalogData, Event, ForceplateData, MarkerData, TrialData
 
+import logging
 
-# TODO: Expected type parameter?
-# TODO: Optimize parameter access especially for indexed parameters
-def get_param_list(c3d: ezc3d.c3d, keys: list[str], default=[]) -> list[Any]:
+logger = logging.getLogger(__name__)
+
+
+def get_param_list(
+    c3d: ezc3d.c3d, keys: list[str], default: list | None = None
+) -> list[Any]:
+    """Navigate nested C3D parameters and return the ``value`` list.
+
+    Args:
+        c3d: ezc3d.c3d object.
+        keys: Parameter group path, e.g. ``["POINT", "LABELS"]``.
+        default: Fallback when the parameter value is missing.
+            ``None`` is treated as ``[]``.
+
+    Returns:
+        The parameter value (usually a list or numpy array), or *default*.
+    """
     param: dict = c3d.parameters
     for key in keys:
         param = param.get(key, {})
-    value = param.get("value", default)
+    value = param.get("value")
+    if value is None:
+        return default if default is not None else []
     return value
 
 
-def get_param(c3d: ezc3d.c3d, keys: list[str], index: int = 0, default=None) -> Any:
-    """
-    Get nested parameters from a C3D object.
+def get_param(
+    c3d: ezc3d.c3d, keys: list[str], index: int = 0, default=None
+) -> Any:
+    """Get a single indexed value from a C3D parameter list.
 
     Args:
-        c3d: ezc3d.c3d object containing C3D data
-        keys: Sequence of keys to access nested parameters
-        index: Optional index for array parameters
-        default: Default value if parameter not found
+        c3d: ezc3d.c3d object containing C3D data.
+        keys: Parameter group path, e.g. ``["POINT", "RATE"]``.
+        index: Index into the parameter's value list.
+        default: Default value if the parameter is missing or empty.
 
     Returns:
-        Parameter value or default
+        Parameter value, or *default* when the value is ``None``.
 
     Raises:
-        IndexError: If index is out of range for array parameters
+        IndexError: If *index* is out of range for a non-empty parameter list.
     """
     param_list = get_param_list(c3d, keys)
+    if not hasattr(param_list, "__len__") or len(param_list) == 0:
+        return default
     if index < 0 or index >= len(param_list):
         raise IndexError(f"Index {index} out of range for parameter '{keys}'")
-    return param_list[index] or default
+    value = param_list[index]
+    return value if value is not None else default
 
 
-# TODO:
-def extract_event_time(c3d: ezc3d.c3d, index: int) -> float:
-    return 0.0
+# ---------------------------------------------------------------------------
+# Events
+# ---------------------------------------------------------------------------
 
 
-# TODO: Maybe just do all events and have individual access happen through core model
 def extract_event(c3d: ezc3d.c3d, index: int) -> Event:
-    """
-    Extract a single event from C3D file.
+    """Extract a single event from a C3D file.
 
     Args:
         index: Index of the event in the EVENT parameter group.
@@ -61,261 +81,278 @@ def extract_event(c3d: ezc3d.c3d, index: int) -> Event:
     if "EVENT" not in c3d.parameters:
         raise ValueError("C3D object does not contain EVENT parameters")
 
-    # Get time in seconds from (min, sec) format
-    times = get_param(c3d, ["EVENT", "TIMES"], default=[[None, None]])
+    # EVENT:TIMES is a (2, n_events) array — row 0 = minutes, row 1 = seconds.
+    # We access the raw value directly; routing through get_param would index
+    # into rows rather than events.
+    times = get_param_list(c3d, ["EVENT", "TIMES"])
     if isinstance(times, np.ndarray):
         if times.ndim < 2 or times.shape[1] <= index:
             raise ValueError(f"No time data for event at index {index}")
         time_min, time_sec = times[:, index]
     else:
-        if not times or len(times) < 2 or len(times[0]) <= index:
-            raise ValueError(f"No time data for event at index {index}")
-        time_min = times[0][index] if len(times[0]) > index else None
-        time_sec = times[1][index] if len(times[1]) > index else None
-
-    if time_min is None or time_sec is None:
-        raise ValueError(f"Invalid time data for event at index {index}")
+        raise ValueError(
+            f"EVENT:TIMES is not a numpy array (got {type(times).__name__})"
+        )
 
     return Event(
         context=get_param(c3d, ["EVENT", "CONTEXTS"], index=index, default=""),
         label=get_param(c3d, ["EVENT", "LABELS"], index=index, default=""),
         time=float(time_min) * 60.0 + float(time_sec),
-        description=get_param(c3d, ["EVENT", "DESCRIPTIONS"], index=index, default=""),
+        description=get_param(
+            c3d, ["EVENT", "DESCRIPTIONS"], index=index, default=""
+        ),
     )
 
 
-# TODO: use param list
 def extract_events(c3d: ezc3d.c3d) -> list[Event]:
-    labels = get_param(c3d, ["EVENT", "LABELS"], default=[])
+    """Extract all events from a C3D file."""
+    labels = get_param_list(c3d, ["EVENT", "LABELS"])
+    if not labels or len(labels) == 0:
+        return []
     return [extract_event(c3d, i) for i in range(len(labels))]
 
 
+# ---------------------------------------------------------------------------
+# Markers
+# ---------------------------------------------------------------------------
+
+
 def extract_markers(c3d: ezc3d.c3d) -> MarkerData:
-    """
-    Extract marker trajectory data from the C3D.
+    """Extract marker trajectory data from the C3D.
+
+    ezc3d layout::
+
+        c3d['data']['points']              — (4, n_markers, n_frames)
+            rows: X, Y, Z, homogeneous coordinate (1.0)
+        c3d['data']['meta_points']['residuals'] — (1, n_markers, n_frames)
 
     Returns:
-        MarkerData with (n_frames, n_markers, 3) data array,
-        or None if no marker data is present.
+        MarkerData with ``data`` shaped ``(n_frames, n_markers, 3)``.
     """
-    # ezc3d stores point data as shape (4, n_markers, n_frames)
-    # where row 0=x, 1=y, 2=z, 3=residual
-    raw_points = c3d.data.get("points")
-    if raw_points is None:
-        raise ValueError("Points not found in data.")
+    raw_points = c3d["data"]["points"]  # (4, n_markers, n_frames)
+
+    # Residuals: (1, N, T) → squeeze axis 0 → (N, T) → transpose → (T, N)
+    residuals = None
+    try:
+        raw_residuals = c3d["data"]["meta_points"]["residuals"]
+        residuals = np.squeeze(raw_residuals, axis=0).T.astype(np.float64)
+    except (KeyError, TypeError):
+        pass
 
     return MarkerData(
+        # (4, N, T)[:3] → (3, N, T) → transpose(2,1,0) → (T, N, 3)
         data=np.transpose(raw_points[:3, :, :], (2, 1, 0)).astype(np.float64),
-        names=get_param_list(c3d, ["POINT", "LABELS"], default=[]),
+        names=get_param_list(c3d, ["POINT", "LABELS"]),
+        descriptions=get_param_list(c3d, ["POINT", "DESCRIPTIONS"]),
         rate=float(get_param(c3d, ["POINT", "RATE"], default=0.0)),
         units=get_param(c3d, ["POINT", "UNITS"], index=0, default="mm"),
-        first_frame=int(c3d.header["points"]["first_frame"]),
-        residuals=np.transpose(raw_points[3, :, :], (1, 0)).astype(np.float64),
+        first_frame=int(c3d["header"]["points"]["first_frame"]),
+        residuals=residuals,
     )
 
 
-# TODO: De-dupe forceplate data so it doesn't also show up in analogs
-def extract_analogs(c3d: ezc3d.c3d) -> AnalogData:
-    """
-    Extract analog channel data from the C3D.
-
-    Returns:
-        AnalogData with (n_frames, n_channels) data array,
-        or None if no analog data is present.
-    """
-    raw_analogs = c3d.data.get("analogs")
-    if raw_analogs is None:
-        raise ValueError("No analog data found in c3d object.")
-
-    return AnalogData(
-        data=raw_analogs[0, :, :].T.astype(np.float64),
-        names=get_param_list(c3d, ["ANALOG", "LABELS"], default=[]),
-        rate=float(get_param(c3d, ["ANALOG", "RATE"], default=0.0)),
-        units=get_param(c3d, ["ANALOG", "UNITS"], index=0, default="V"),
-        first_frame=int(c3d.header["points"]["first_frame"]),
-    )
-
-
-# TODO:
-def sanitize_fp_name(name: str) -> str:
-    return name.replace(" ", "_").replace("[", "").replace("]", "")
-
-
-def _extract_forceplate_names(
-    c3d: ezc3d.c3d, analog_descriptions: list[str]
-) -> list[str]:
-    """
-    Extract forceplate names from analog channel descriptions.
-
-    Many C3D files include forceplate identifiers in the ANALOG:DESCRIPTIONS
-    parameter, such as "Bertec Force Plate [2]". This method extracts unique
-    forceplate names by finding the first channel of each platform.
-
-    Args:
-        analog_descriptions: List of analog channel descriptions
-
-    Returns:
-        List of forceplate names in platform order, or empty list if extraction fails.
-    """
-    if not analog_descriptions:
-        return []
-
-    try:
-        channel_mapping = get_param_list(c3d, ["FORCE_PLATFORM", "CHANNEL"])
-        if len(channel_mapping) == 0:
-            return []
-
-        n_platforms = channel_mapping.shape[1] if len(channel_mapping.shape) > 1 else 0
-        if n_platforms == 0:
-            return []
-
-        forceplate_names = []
-        for platform_idx in range(n_platforms):
-            first_channel_idx = int(channel_mapping[0, platform_idx]) - 1
-            if first_channel_idx < len(analog_descriptions):
-                desc = analog_descriptions[first_channel_idx]
-                match = re.search(r"(.*Force\s*Plate\s*\[?\d+\]?)", desc, re.IGNORECASE)
-                if match:
-                    forceplate_names.append(match.group(1).strip())
-                else:
-                    forceplate_names.append(desc.strip())
-            else:
-                return []
-
-        return forceplate_names
-
-    except (KeyError, IndexError, AttributeError):
-        return []
+# ---------------------------------------------------------------------------
+# Analogs
+# ---------------------------------------------------------------------------
 
 
 def extract_analog_rate(c3d: ezc3d.c3d) -> float:
+    """Extract the analog sampling rate, falling back to point_rate * ratio."""
     analog_rate = float(get_param(c3d, ["ANALOG", "RATE"], default=0.0))
     if analog_rate <= 0:
-        # Fall back to point rate * analog-per-frame ratio
         point_rate = float(get_param(c3d, ["POINT", "RATE"], default=0.0))
         ratio = float(get_param(c3d, ["ANALOG", "RATIO"], default=1.0))
         analog_rate = point_rate * ratio
     return analog_rate
 
 
-def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
+def extract_analogs(c3d: ezc3d.c3d) -> AnalogData:
+    """Extract analog channel data from the C3D.
+
+    ezc3d layout::
+
+        c3d['data']['analogs'] — (1, n_channels, n_frames)
+
+    Returns:
+        AnalogData with ``data`` shaped ``(n_frames, n_channels)``.
     """
-    Extract force plate data from the C3D file.
-    Relies heavily on ezc3d's platform parsing, which organizes data by platform and provides force, moment, and cop arrays.
+    raw_analogs = c3d["data"]["analogs"]  # (1, n_channels, n_frames)
 
-    Returns a single ForceplateData container with stacked arrays:
-        - forces, moments, cop: (n_frames, n_plates, 3)
-        - origins: (3, n_plates)
-        - corners: (4, n_plates, 3)
-        - cal_matrices: (6, n_plates, 6)
-    """
-    platforms = c3d.data.get("platform")
-    if not platforms:
-        raise ValueError("No platform data found.")
-
-    n_platforms = len(platforms)  # or USED
-
-    # Determine forceplate names
-    analog_descriptions: list[str] = get_param_list(c3d, ["ANALOG", "DESCRIPTIONS"])
-    fp_names = _extract_forceplate_names(c3d, analog_descriptions)
-
-    if not fp_names or len(fp_names) != n_platforms:
-        fp_names = [f"FP_{i}" for i in range(n_platforms)]
-
-    fp_names = [sanitize_fp_name(name) for name in fp_names]
-
-    # Get static platform metadata from C3D parameters
-    raw_origins = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"]))
-    raw_corners = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"]))
-    raw_cal_matrices = np.asarray(get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"]))
-
-    # Collect per-plate arrays
-    forces_list: list[np.ndarray] = []
-    moments_list: list[np.ndarray] = []
-    cop_list: list[np.ndarray] = []
-    origin_list: list[np.ndarray] = []
-    corner_list: list[np.ndarray] = []
-    cal_list: list[np.ndarray] = []
-    valid_names: list[str] = []
-
-    for i, platform in enumerate(platforms):
-        # ezc3d platform dict has keys: 'force', 'moment', 'center_of_pressure'
-        # Each is shape (3, 1, n_frames)
-        forces_raw = platform.get("force")
-        moments_raw = platform.get("moment")
-        cop_raw = platform.get("center_of_pressure")
-
-        if forces_raw is None or moments_raw is None or cop_raw is None:
-            continue
-
-        # Reshape: (3, 1, n_frames) -> (n_frames, 3)
-        forces_list.append(forces_raw[:, 0, :].T.astype(np.float64))
-        moments_list.append(moments_raw[:, 0, :].T.astype(np.float64))
-        cop_list.append(cop_raw[:, 0, :].T.astype(np.float64))
-        valid_names.append(fp_names[i])
-
-        # origin: C3D shape (3, n_platforms) -> per-plate (3,)
-        if (
-            raw_origins is not None
-            and hasattr(raw_origins, "shape")
-            and raw_origins.shape[1] > i
-        ):
-            origin_list.append(raw_origins[:, i].astype(np.float64))
-        else:
-            origin_list.append(np.zeros(3, dtype=np.float64))
-
-        # corners: C3D shape (3, 4, n_platforms) -> per-plate (4, 3)
-        if (
-            raw_corners is not None
-            and hasattr(raw_corners, "shape")
-            and raw_corners.shape[2] > i
-        ):
-            corner_list.append(raw_corners[:, :, i].T.astype(np.float64))
-        else:
-            corner_list.append(np.zeros((4, 3), dtype=np.float64))
-
-        # cal_matrix: C3D shape (6, 6, n_platforms) -> per-plate (6, 6)
-        if (
-            raw_cal_matrices is not None
-            and hasattr(raw_cal_matrices, "ndim")
-            and raw_cal_matrices.ndim == 3
-            and raw_cal_matrices.shape[2] > i
-        ):
-            cal_list.append(raw_cal_matrices[:, :, i].astype(np.float64))
-        else:
-            cal_list.append(np.eye(6, dtype=np.float64))
-
-    if not forces_list:
-        raise ValueError("No valid force plate data found.")
-
-    # Stack into multi-plate arrays
-    # Data: per-plate (n_frames, 3) -> stacked (n_frames, n_plates, 3)
-    forces = np.stack(forces_list, axis=1)
-    moments = np.stack(moments_list, axis=1)
-    cop = np.stack(cop_list, axis=1)
-
-    # Metadata: origins (3,) per plate -> (3, n_plates)
-    origins = np.stack(origin_list, axis=1)
-    # corners (4, 3) per plate -> (4, n_plates, 3)
-    corners = np.stack(corner_list, axis=1)
-    # cal_matrices (6, 6) per plate -> (6, n_plates, 6)
-    cal_matrices = np.stack(cal_list, axis=1)
-
-    return ForceplateData(
-        names=valid_names,
-        forces=forces,
-        moments=moments,
-        cop=cop,
-        origins=origins,
-        corners=corners,
-        cal_matrices=cal_matrices,
+    return AnalogData(
+        data=raw_analogs[0, :, :].T.astype(np.float64),  # → (n_frames, n_channels)
+        names=get_param_list(c3d, ["ANALOG", "LABELS"]),
         rate=extract_analog_rate(c3d),
+        units=get_param_list(c3d, ["ANALOG", "UNITS"]),
+        descriptions=get_param_list(c3d, ["ANALOG", "DESCRIPTIONS"]),
+        first_frame=int(c3d["header"]["points"]["first_frame"]),
     )
 
 
-def extract_processing_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
+# ---------------------------------------------------------------------------
+# Forceplates
+# ---------------------------------------------------------------------------
+
+
+def sanitize_fp_name(name: str) -> str:
+    """Sanitize a forceplate name for use as a column identifier."""
+    return name.replace(" ", "_").replace("[", "").replace("]", "")
+
+
+def find_forceplate_names(c3d: ezc3d.c3d, n_platforms: int) -> list[str]:
+    """Derive human-readable forceplate names from ANALOG:DESCRIPTIONS.
+
+    Uses the first analog channel index per plate (from
+    ``FORCE_PLATFORM:CHANNEL``) to look up a description.  Falls back to
+    generic ``FP_0``, ``FP_1``, ... when descriptions are unavailable or
+    don't match the number of platforms.
     """
-    Extract PROCESSING parameters from the C3D file.
+    # FORCE_PLATFORM:CHANNEL is (n_channels_per_plate, n_plates), e.g. (6, 4)
+    # Values are 1-based analog channel indices.
+    channel_arr = get_param_list(c3d, ["FORCE_PLATFORM", "CHANNEL"])
+    analog_descriptions = get_param_list(c3d, ["ANALOG", "DESCRIPTIONS"])
+
+    fp_names: list[str] = []
+    if (
+        analog_descriptions
+        and isinstance(channel_arr, np.ndarray)
+        and channel_arr.ndim == 2
+    ):
+        # Take the first channel per plate (row 0) as representative
+        first_channels = channel_arr[0, :]  # shape (n_plates,)
+        seen: set[str] = set()
+        for idx in first_channels:
+            adj = int(idx) - 1  # convert to 0-based
+            if 0 <= adj < len(analog_descriptions):
+                name = sanitize_fp_name(analog_descriptions[adj])
+                if name and name not in seen:
+                    fp_names.append(name)
+                    seen.add(name)
+
+    if len(fp_names) != n_platforms:
+        fp_names = [f"FP_{i}" for i in range(n_platforms)]
+
+    return fp_names
+
+
+def extract_forceplates(c3d: ezc3d.c3d) -> ForceplateData:
+    """Extract force plate data from the C3D file.
+
+    Relies on ezc3d's platform parsing (requires
+    ``extract_forceplat_data=True`` when loading).
+
+    ezc3d per-platform shapes::
+
+        force / moment / center_of_pressure / Tz : (3, n_frames)
+        origin  : (3,)
+        corners : (3, 4)
+        cal_matrix : (6, 6)  — may be (0,) if absent
+
+    Returns a single ForceplateData container with stacked arrays:
+
+    - forces, moments, cop : ``(n_frames, n_plates, 3)``
+    - free_moment : ``(n_frames, n_plates, 3)`` or ``None``
+    - origins : ``(3, n_plates)``
+    - corners : ``(4, n_plates, 3)``
+    - cal_matrices : ``(6, n_plates, 6)``
+    """
+    platforms = c3d["data"]["platform"]
+    if not platforms:
+        raise ValueError(
+            "No platform data found. "
+            "Make sure you set 'extract_forceplat_data=True' when loading the C3D file."
+        )
+
+    n_platforms = len(platforms)
+
+    def stack_timeseries(field: str) -> np.ndarray:
+        """Stack per-platform time-series arrays.
+
+        Per-platform shape: ``(3, n_frames)``
+        After np.stack along new axis 1: ``(3, n_plates, n_frames)``
+        After transpose ``(2,1,0)``: ``(n_frames, n_plates, 3)``
+        """
+        stacked = np.stack(
+            [platforms[i][field] for i in range(n_platforms)], axis=1
+        )
+        return np.transpose(stacked, (2, 1, 0)).astype(np.float64)
+
+    def stack_origins() -> np.ndarray:
+        """Stack per-platform origins.
+
+        Per-platform shape: ``(3,)``
+        After np.stack along axis 1: ``(3, n_plates)`` — matches NOrigins.
+        """
+        return np.stack(
+            [platforms[i]["origin"] for i in range(n_platforms)], axis=1
+        ).astype(np.float64)
+
+    def stack_corners() -> np.ndarray:
+        """Stack per-platform corners.
+
+        Per-platform shape: ``(3, 4)`` — 3 xyz, 4 corners
+        After np.stack along new axis 1: ``(3, n_plates, 4)``
+        After transpose ``(2,1,0)``: ``(4, n_plates, 3)`` — matches NCorners.
+        """
+        stacked = np.stack(
+            [platforms[i]["corners"] for i in range(n_platforms)], axis=1
+        )
+        return np.transpose(stacked, (2, 1, 0)).astype(np.float64)
+
+    def stack_cal_matrices() -> np.ndarray:
+        """Stack per-platform calibration matrices.
+
+        Per-platform shape: ``(6, 6)`` (or ``(0,)`` if absent)
+        After np.stack along new axis 1: ``(6, n_plates, 6)`` — matches NCalMatrix.
+
+        When cal_matrix is absent ``(0,)`` for a platform, a zero matrix
+        is substituted.
+        """
+        matrices = []
+        for i in range(n_platforms):
+            m = platforms[i]["cal_matrix"]
+            if m.ndim < 2 or m.size == 0:
+                m = np.zeros((6, 6), dtype=np.float64)
+            matrices.append(m)
+        return np.stack(matrices, axis=1).astype(np.float64)
+
+    # Tz (free moment) may not be present or may be all zeros
+    free_moment = None
+    try:
+        fm = stack_timeseries("Tz")
+        if np.any(fm != 0):
+            free_moment = fm
+    except (KeyError, IndexError):
+        pass
+
+    # Extract per-platform units (should be consistent across plates)
+    unit_force = platforms[0].get("unit_force", "N")
+    unit_moment = platforms[0].get("unit_moment", "Nmm")
+    unit_position = platforms[0].get("unit_position", "mm")
+
+    return ForceplateData(
+        names=find_forceplate_names(c3d, n_platforms),
+        forces=stack_timeseries("force"),
+        moments=stack_timeseries("moment"),
+        cop=stack_timeseries("center_of_pressure"),
+        free_moment=free_moment,
+        origins=stack_origins(),
+        corners=stack_corners(),
+        cal_matrices=stack_cal_matrices(),
+        rate=extract_analog_rate(c3d),
+        first_frame=int(c3d["header"]["points"]["first_frame"]),
+        unit_force=unit_force,
+        unit_moment=unit_moment,
+        unit_position=unit_position,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Processing parameters
+# ---------------------------------------------------------------------------
+
+
+def extract_processing_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
+    """Extract PROCESSING parameters from the C3D file.
 
     The PROCESSING group is used by Vicon (and some other systems)
     to store subject-specific parameters like mass, height, and
@@ -338,8 +375,14 @@ def extract_processing_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
     return parameters
 
 
+# ---------------------------------------------------------------------------
+# Trial assembly
+# ---------------------------------------------------------------------------
+
+
+# TODO: De-dupe forceplate data so it doesn't also show up in analogs
 def create_trial(c3d: ezc3d.c3d, name: str) -> TrialData:
-    # TODO: remove fp channels from analogs
+    """Create a TrialData model from a loaded C3D object."""
     return TrialData(
         name=name,
         markers=extract_markers(c3d),

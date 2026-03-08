@@ -16,7 +16,7 @@ class Event(BaseModel):
     context: str = Field(description="Event context (e.g., 'Left', 'Right', 'General')")
     label: str = Field(description="Event label (e.g., 'Foot Strike', 'Foot Off')")
     frame: PositiveInt | None = Field(default=None, description="Frame number")
-    time: PositiveFloat | None = Field(
+    time: float | None = Field(
         default=None,
         description="Time in seconds from the start of the trial",
     )

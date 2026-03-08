@@ -25,8 +25,11 @@ class _MetaBase(BaseModel):
     #     description="Type of signal data (e.g., 'markers', 'forceplates', 'analogs')"
     # )
     rate: PositiveFloat = Field(description="Sampling rate in Hz")
-    first_frame: int = Field(description="First frame number in the trial")
+    first_frame: int = Field(default=1, description="First frame number in the trial")
     names: list[str] = Field(description="Signal names")
+    descriptions: list[str] | None = Field(
+        default=None, description="Optional descriptions for each signal"
+    )
 
     def metadata(self) -> _MetaBase:
         """Return a pure metadata instance, stripping data-only fields."""

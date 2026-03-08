@@ -12,7 +12,7 @@ class AnalogMeta(_MetaBase):
     """Metadata for analog data, embedded in Parquet file-level metadata."""
 
     type: Literal["analogs"] = "analogs"
-    units: str = Field(description="Signal units (e.g., 'V', 'mV')")
+    units: list[str] = Field(description="Signal units (e.g., 'V', 'mV')")
 
 
 class AnalogData(AnalogMeta):
