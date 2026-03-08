@@ -21,9 +21,11 @@ class ForceplateMeta(_MetaBase):
     """Metadata for forceplate data, embedded in Parquet file-level metadata."""
 
     type: Literal["forceplates"] = "forceplates"
-    unit_force: str = Field(default="N", description="Force units")
-    unit_moment: str = Field(default="Nm", description="Moment units")
-    unit_position: str = Field(default="m", description="Position units")
+    units_force: list[str] = Field(description="Force units per plate (e.g., 'N')")
+    units_moment: list[str] = Field(description="Moment units per plate (e.g., 'Nmm')")
+    units_position: list[str] = Field(
+        description="Position units per plate (e.g., 'mm')"
+    )
     origins: NOrigins = Field(
         description="Origin coordinates of shape (3, n_plates) - xyz per plate"
     )
@@ -96,6 +98,15 @@ class ForceplateData(ForceplateMeta):
                 f"Mismatch: {len(self.names)} plate names provided, "
                 f"but data arrays have {n_forces} plates."
             )
+
+        # Units lists must be parallel to names
+        for field_name in ("units_force", "units_moment", "units_position"):
+            units = getattr(self, field_name)
+            if len(units) != n_forces:
+                raise ValueError(
+                    f"Mismatch: {len(units)} {field_name} provided, "
+                    f"but data arrays have {n_forces} plates."
+                )
 
         moments = np.asarray(self.moments)
         moment_frames, n_moments, _ = moments.shape

@@ -1,0 +1,12 @@
+[project]
+name = "movedb-core"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ezc3d>=1.6.3",
+    "numpydantic>=1.8.0",
+    "polars>=1.38.1",
+    "pydantic>=2.12.5",
+]

@@ -1,8 +1,7 @@
-.env
 *.db
 data/
 # Byte-compiled / optimized / DLL files
-__pycache__/
+*__pycache__/
 *.py[cod]
 *$py.class
 
@@ -133,11 +132,3 @@ Thumbs.db
 *.swp
 *.swo
 
-# Project specific
-tests/data/*
-notebooks/*
-*.c3d
-*.trc
-*.mot
-*.sto
-*.osim

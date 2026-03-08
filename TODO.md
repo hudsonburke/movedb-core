@@ -1,9 +1,5 @@
 # MoveDB Core
 
-## Core Features
-
-- [ ] Add plotting for core models
-
 ## IO
 
 - [ ] Add support for different mocap systems
@@ -48,7 +44,6 @@
 
 ## Feature Implementation
 
-- [ ] Finish the implementation of the `export_force_platforms` function in `osim/write.py`.
 - [ ] Implement data visualization features, potentially using `pyvista`.
 - [ ] Implement asynchronous processing for database operations to improve performance.
 
