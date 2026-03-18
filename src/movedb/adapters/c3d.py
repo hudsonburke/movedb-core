@@ -343,7 +343,6 @@ def extract_processing_parameters(c3d: ezc3d.c3d) -> dict[str, Any]:
     return parameters
 
 
-# TODO: De-dupe forceplate data so it doesn't also show up in analogs
 def create_trial(c3d: ezc3d.c3d, name: str) -> TrialData:
     """Create a TrialData model from a loaded C3D object."""
     return TrialData(

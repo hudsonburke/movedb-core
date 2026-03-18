@@ -4,6 +4,7 @@ from .trial import TrialData
 from .analogs import AnalogData, AnalogMeta
 from .markers import MarkerData, MarkerMeta
 from .forceplates import ForceplateData, ForceplateMeta
+from .parameters import SessionParameters
 
 __all__ = [
     "AnalogData",
@@ -13,5 +14,6 @@ __all__ = [
     "ForceplateMeta",
     "MarkerData",
     "MarkerMeta",
+    "SessionParameters",
     "TrialData",
 ]

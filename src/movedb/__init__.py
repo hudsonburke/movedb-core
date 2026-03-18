@@ -10,10 +10,14 @@ MoveDB provides tools for:
 
 from . import core
 from . import adapters
+from . import storage
+from . import catalog
 
 
 # Main exports
 __all__ = [
     "core",
     "adapters",
+    "storage",
+    "catalog",
 ]

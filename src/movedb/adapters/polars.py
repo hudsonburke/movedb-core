@@ -1,81 +1,16 @@
 """Converters between core models, Polars DataFrames, and Parquet files."""
 
-import json
 import numpy as np
 import polars as pl
-from typing import Any, Literal, Annotated, Union
-from pathlib import Path
-from pydantic import Discriminator
+from typing import Any, Literal
 from ..core import (
     AnalogData,
     Event,
     ForceplateData,
     MarkerData,
-    AnalogMeta,
-    ForceplateMeta,
-    MarkerMeta,
 )
 
-# Discriminated union of all signal metadata types.
-# Used as Parquet file-level metadata: the ``type`` field determines
-# which concrete metadata model to instantiate on read.
-#
-# Usage:
-#   from pydantic import TypeAdapter
-#   ta = TypeAdapter(SignalMeta)
-#   meta = ta.validate_python(raw_dict)   # -> MarkerMeta | AnalogMeta | ForceplateMeta
-SignalMeta = Annotated[
-    Union[MarkerMeta, AnalogMeta, ForceplateMeta],
-    Discriminator("type"),
-]
-
-
-def write_parquet(
-    df: pl.DataFrame,
-    path: Path | str,
-    metadata: dict[str, Any] | None = None,
-) -> Path:
-    """
-    Write a Polars DataFrame to a Parquet file with optional movedb metadata.
-
-    Metadata is stored as a JSON string under the ``movedb`` key in the
-    Parquet file's key-value metadata, making the files self-describing.
-
-    Args:
-        df: Polars DataFrame to write.
-        path: Output file path.
-        metadata: Optional dict of movedb metadata (rate, units, names, etc.).
-
-    Returns:
-        The resolved Path that was written.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    parquet_meta = {"movedb": json.dumps(metadata)} if metadata is not None else None
-    df.write_parquet(path, metadata=parquet_meta)
-    return path
-
-
-def read_parquet(path: Path | str) -> tuple[pl.DataFrame, dict[str, Any] | None]:
-    """
-    Read a Parquet file and extract any embedded movedb metadata.
-
-    Args:
-        path: Path to the Parquet file.
-
-    Returns:
-        Tuple of (DataFrame, metadata dict or None).
-    """
-    path = Path(path)
-    df = pl.read_parquet(path)
-    file_meta = pl.read_parquet_metadata(path)
-    movedb_meta = json.loads(file_meta["movedb"]) if "movedb" in file_meta else None
-    return df, movedb_meta
-
-
-# ---------------------------------------------------------------------------
-# Core model -> Polars DataFrame
-# ---------------------------------------------------------------------------
+# TODO: Optimize wide/long conversions and add projection helpers
 
 
 def markers_to_polars(
@@ -242,6 +177,11 @@ def forceplates_to_polars(
     forces = np.asarray(forceplate_data.forces)  # (n_frames, n_plates, 3)
     moments = np.asarray(forceplate_data.moments)  # (n_frames, n_plates, 3)
     cop = np.asarray(forceplate_data.cop)  # (n_frames, n_plates, 3)
+    free_moment = (
+        np.asarray(forceplate_data.free_moment)
+        if forceplate_data.free_moment is not None
+        else None
+    )  # (n_frames, n_plates, 3) or None
     names = forceplate_data.names
     time = np.asarray(forceplate_data.time_vector)
     frames = np.asarray(forceplate_data.frame_vector)
@@ -254,7 +194,7 @@ def forceplates_to_polars(
         df = pl.DataFrame(base_dict)
 
         # Build a nested struct column per plate:
-        # FP_name -> Struct({force: Struct({x,y,z}), moment: ..., cop: ...})
+        # FP_name -> Struct({force: Struct({x,y,z}), moment: ..., cop: ..., [free_moment: ...]})
         plate_cols = []
         for i, fp_name in enumerate(names):
             force_struct = pl.struct(
@@ -275,9 +215,17 @@ def forceplates_to_polars(
                 pl.Series("z", cop[:, i, 2]),
             ).alias("cop")
 
-            plate_cols.append(
-                pl.struct(force_struct, moment_struct, cop_struct).alias(fp_name)
-            )
+            struct_fields = [force_struct, moment_struct, cop_struct]
+
+            if free_moment is not None:
+                free_moment_struct = pl.struct(
+                    pl.Series("x", free_moment[:, i, 0]),
+                    pl.Series("y", free_moment[:, i, 1]),
+                    pl.Series("z", free_moment[:, i, 2]),
+                ).alias("free_moment")
+                struct_fields.append(free_moment_struct)
+
+            plate_cols.append(pl.struct(*struct_fields).alias(fp_name))
 
         return df.with_columns(plate_cols)
 
@@ -295,29 +243,37 @@ def forceplates_to_polars(
         ]
         axes = ["x", "y", "z", "x", "y", "z", "x", "y", "z"]
 
+        if free_moment is not None:
+            variables += ["free_moment", "free_moment", "free_moment"]
+            axes += ["x", "y", "z"]
+
+        n_vars = len(variables)
+
         plate_dfs: list[pl.DataFrame] = []
         for i, fp_name in enumerate(names):
-            all_values = np.column_stack(
-                [
-                    forces[:, i, :],
-                    moments[:, i, :],
-                    cop[:, i, :],
-                ]
-            )  # (n_frames, 9)
+            cols = [
+                forces[:, i, :],
+                moments[:, i, :],
+                cop[:, i, :],
+            ]
+            if free_moment is not None:
+                cols.append(free_moment[:, i, :])
 
-            time_repeated = np.repeat(time, 9)
-            frame_repeated = np.repeat(frames, 9)
+            all_values = np.column_stack(cols)  # (n_frames, n_vars)
+
+            time_repeated = np.repeat(time, n_vars)
+            frame_repeated = np.repeat(frames, n_vars)
 
             df_dict: dict[str, Any] = {
                 "time": time_repeated,
                 "frame": frame_repeated,
-                "fp_name": [fp_name] * (n_frames * 9),
+                "fp_name": [fp_name] * (n_frames * n_vars),
                 "variable": np.tile(variables, n_frames),
                 "axis": np.tile(axes, n_frames),
                 "value": all_values.flatten(),
             }
             if trial_name is not None:
-                df_dict["trial_name"] = [trial_name] * (n_frames * 9)
+                df_dict["trial_name"] = [trial_name] * (n_frames * n_vars)
             plate_dfs.append(pl.DataFrame(df_dict))
 
         return pl.concat(plate_dfs)

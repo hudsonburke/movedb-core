@@ -10,8 +10,6 @@ from .polars import (
     events_to_polars,
     forceplates_to_polars,
     markers_to_polars,
-    write_parquet,
-    read_parquet,
 )
 from .parameters import (
     extract_parameters,
@@ -31,9 +29,6 @@ __all__ = [
     "events_to_polars",
     "forceplates_to_polars",
     "markers_to_polars",
-    # Parquet I/O
-    "write_parquet",
-    "read_parquet",
     # Parameters
     "extract_parameters",
     "write_parameters",
