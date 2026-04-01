@@ -4,12 +4,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import duckdb
+from .protocols import CatalogConnection
+from .sql import (
+    ID_TRIALS_VIEW_SQL,
+    OSIM_SESSIONS_VIEW_SQL,
+    QUALIFIED_TRIALS_VIEW_SQL,
+    SESSION_SELECTION_METRICS_VIEW_SQL,
+    SESSION_INVENTORY_VIEW_SQL,
+    TRIAL_SELECTION_METRICS_VIEW_SQL,
+    TRIALS_VIEW_SQL,
+    TRIAL_MANIFEST_VIEW_SQL,
+    OSIM_ARTIFACTS_VIEW_SQL,
+    OSIM_IK_VIEW_SQL,
+    OSIM_ID_VIEW_SQL,
+    LATEST_OSIM_IK_VIEW_SQL,
+    LATEST_OSIM_ID_VIEW_SQL,
+)
 
-from .sql import TRIALS_VIEW_SQL
 
-
-def create_bundle_views(conn: duckdb.DuckDBPyConnection, session_dir: str | Path) -> None:
+def create_bundle_views(conn: CatalogConnection, session_dir: str | Path) -> None:
     """Expose canonical bundle files as local DuckDB views."""
 
     session_dir = Path(session_dir)
@@ -28,17 +41,35 @@ def create_bundle_views(conn: duckdb.DuckDBPyConnection, session_dir: str | Path
             )
 
 
-def create_catalog_views(conn: duckdb.DuckDBPyConnection) -> None:
+def create_catalog_views(conn: CatalogConnection) -> None:
     """Create the first global catalog views over registered bundles."""
 
-    if _has_file_kind(conn, "parameters"):
-        _create_union_view(conn, "session_parameters", file_kind="parameters")
-    if _has_file_kind(conn, "events"):
-        _create_union_view(conn, "events", file_kind="events")
+    conn.execute(SESSION_INVENTORY_VIEW_SQL)
+    if _create_registered_file_view(conn, "parameters", view_name="session_parameters"):
+        pass
+    if _create_registered_file_view(conn, "events", view_name="events"):
         conn.execute(TRIALS_VIEW_SQL)
+        conn.execute(TRIAL_MANIFEST_VIEW_SQL)
+    _create_registered_file_view(conn, "markers", view_name="markers")
+    _create_registered_file_view(conn, "forceplates", view_name="forceplates")
+    _create_registered_file_view(conn, "analogs", view_name="analogs")
+    if _glob_exists(conn, "sub-*/ses-*/opensim/*_ik.parquet"):
+        _create_glob_view(conn, "opensim_ik", relative_pattern="sub-*/ses-*/opensim/*_ik.parquet")
+    if _glob_exists(conn, "sub-*/ses-*/opensim/*_id.parquet"):
+        _create_glob_view(conn, "opensim_id", relative_pattern="sub-*/ses-*/opensim/*_id.parquet")
+    conn.execute(SESSION_SELECTION_METRICS_VIEW_SQL)
+    conn.execute(TRIAL_SELECTION_METRICS_VIEW_SQL)
+    conn.execute(OSIM_SESSIONS_VIEW_SQL)
+    conn.execute(QUALIFIED_TRIALS_VIEW_SQL)
+    conn.execute(ID_TRIALS_VIEW_SQL)
+    conn.execute(OSIM_ARTIFACTS_VIEW_SQL)
+    conn.execute(OSIM_IK_VIEW_SQL)
+    conn.execute(OSIM_ID_VIEW_SQL)
+    conn.execute(LATEST_OSIM_IK_VIEW_SQL)
+    conn.execute(LATEST_OSIM_ID_VIEW_SQL)
 
 
-def _has_file_kind(conn: duckdb.DuckDBPyConnection, file_kind: str) -> bool:
+def _has_file_kind(conn: CatalogConnection, file_kind: str) -> bool:
     result = conn.execute(
         "SELECT COUNT(*) FROM movedb_catalog.session_files WHERE file_kind = ?",
         [file_kind],
@@ -46,21 +77,50 @@ def _has_file_kind(conn: duckdb.DuckDBPyConnection, file_kind: str) -> bool:
     return bool(result and result[0])
 
 
-def _create_union_view(
-    conn: duckdb.DuckDBPyConnection,
-    view_name: str,
-    *,
-    file_kind: str,
-) -> None:
-    paths = conn.execute(
+def _glob_exists(conn: CatalogConnection, relative_pattern: str) -> bool:
+    dataset_root = _get_dataset_root(conn)
+    if dataset_root is None:
+        return False
+    return any(dataset_root.glob(relative_pattern))
+
+
+def _create_registered_file_view(conn: CatalogConnection, file_kind: str, *, view_name: str) -> bool:
+    rows = conn.execute(
         "SELECT path FROM movedb_catalog.session_files WHERE file_kind = ? ORDER BY path",
         [file_kind],
     ).fetchall()
-    if not paths:
-        return
-    unions = [
-        f"SELECT * FROM read_parquet('{path[0].replace(chr(39), chr(39) * 2)}')"
-        for path in paths
-    ]
-    sql = f"CREATE OR REPLACE VIEW movedb_catalog.{view_name} AS " + " UNION ALL ".join(unions)
-    conn.execute(sql)
+    if not rows:
+        return False
+
+    selects = []
+    for (path,) in rows:
+        quoted_path = str(path).replace("'", "''")
+        selects.append(f"SELECT * FROM read_parquet('{quoted_path}')")
+
+    conn.execute(f"CREATE OR REPLACE VIEW movedb_catalog.{view_name} AS {' UNION ALL '.join(selects)}")
+    return True
+
+
+def _create_glob_view(
+    conn: CatalogConnection,
+    view_name: str,
+    *,
+    relative_pattern: str,
+) -> bool:
+    dataset_root = _get_dataset_root(conn)
+    if dataset_root is None:
+        return False
+    glob_path = str((dataset_root / relative_pattern).resolve()).replace("'", "''")
+    conn.execute(
+        f"CREATE OR REPLACE VIEW movedb_catalog.{view_name} AS SELECT * FROM '{glob_path}'"
+    )
+    return True
+
+
+def _get_dataset_root(conn: CatalogConnection) -> Path | None:
+    row = conn.execute(
+        "SELECT setting_value FROM movedb_catalog.catalog_settings WHERE setting_key = 'dataset_root'"
+    ).fetchone()
+    if row is None or row[0] is None:
+        return None
+    return Path(row[0])

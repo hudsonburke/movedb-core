@@ -265,3 +265,42 @@ CREATE TABLE IF NOT EXISTS movedb_catalog.osim_artifacts (
     extras_json TEXT
 );
 """
+
+OSIM_ARTIFACTS_VIEW_SQL = """
+CREATE OR REPLACE VIEW movedb_catalog.osim_artifacts_view AS
+SELECT * FROM movedb_catalog.osim_artifacts;
+"""
+
+OSIM_IK_VIEW_SQL = """
+CREATE OR REPLACE VIEW movedb_catalog.osim_ik AS
+SELECT * FROM movedb_catalog.osim_artifacts WHERE pipeline = 'ik';
+"""
+
+OSIM_ID_VIEW_SQL = """
+CREATE OR REPLACE VIEW movedb_catalog.osim_id AS
+SELECT * FROM movedb_catalog.osim_artifacts WHERE pipeline = 'id';
+"""
+
+LATEST_OSIM_IK_VIEW_SQL = """
+CREATE OR REPLACE VIEW movedb_catalog.latest_osim_ik AS
+SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY session_key, trial_key
+        ORDER BY created_at DESC, run_id DESC
+    ) AS rn
+    FROM movedb_catalog.osim_artifacts
+    WHERE pipeline = 'ik'
+) WHERE rn = 1;
+"""
+
+LATEST_OSIM_ID_VIEW_SQL = """
+CREATE OR REPLACE VIEW movedb_catalog.latest_osim_id AS
+SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY session_key, trial_key
+        ORDER BY created_at DESC, run_id DESC
+    ) AS rn
+    FROM movedb_catalog.osim_artifacts
+    WHERE pipeline = 'id'
+) WHERE rn = 1;
+"""
