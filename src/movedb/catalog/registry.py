@@ -5,22 +5,87 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-import duckdb
-
 from .discovery import SessionBundleDescriptor, discover_session_bundle
-from .sql import CATALOG_SCHEMA_SQL, CREATE_SESSION_FILES_TABLE_SQL, CREATE_SESSIONS_TABLE_SQL
+from .protocols import CatalogConnection
+from .sql import (
+    CREATE_CATALOG_SETTINGS_TABLE_SQL,
+    CATALOG_SCHEMA_SQL,
+    CREATE_OSIM_ARTIFACTS_TABLE_SQL,
+    CREATE_SESSION_FILES_TABLE_SQL,
+    CREATE_SESSION_METRICS_TABLE_SQL,
+    CREATE_SESSIONS_TABLE_SQL,
+    CREATE_SESSION_QUALITY_TABLE_SQL,
+    CREATE_TRIAL_METRICS_TABLE_SQL,
+    CREATE_TRIAL_QUALITY_TABLE_SQL,
+)
 from .views import create_catalog_views
+from ..osim.types import OsimArtifactRow
 
 
-def initialize_catalog(conn: duckdb.DuckDBPyConnection) -> None:
+def initialize_catalog(conn: CatalogConnection) -> None:
     """Create the base catalog schema and registry tables."""
 
     conn.execute(CATALOG_SCHEMA_SQL)
+    conn.execute(CREATE_CATALOG_SETTINGS_TABLE_SQL)
     conn.execute(CREATE_SESSIONS_TABLE_SQL)
     conn.execute(CREATE_SESSION_FILES_TABLE_SQL)
+    conn.execute(CREATE_SESSION_METRICS_TABLE_SQL)
+    conn.execute(CREATE_TRIAL_METRICS_TABLE_SQL)
+    conn.execute(CREATE_SESSION_QUALITY_TABLE_SQL)
+    conn.execute(CREATE_TRIAL_QUALITY_TABLE_SQL)
+    conn.execute(CREATE_OSIM_ARTIFACTS_TABLE_SQL)
 
 
-def register_session_bundle(conn: duckdb.DuckDBPyConnection, session_dir: str | Path) -> SessionBundleDescriptor:
+def register_osim_artifact(conn: CatalogConnection, row: OsimArtifactRow) -> None:
+    if row["is_canonical"]:
+        conn.execute(
+            """
+            UPDATE movedb_catalog.osim_artifacts
+            SET is_canonical = FALSE
+            WHERE session_key = ?
+              AND pipeline = ?
+              AND scope = ?
+              AND trial_key IS NOT DISTINCT FROM ?
+            """,
+            [row["session_key"], row["pipeline"], row["scope"], row["trial_key"]],
+        )
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO movedb_catalog.osim_artifacts (
+            artifact_id, run_id, pipeline, output_kind, scope,
+            session_key, trial_key, path, native_path, format,
+            status, is_canonical, created_at, parameter_hash,
+            parameter_json, provenance_json, extras_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            row["artifact_id"],
+            row["run_id"],
+            row["pipeline"],
+            row["output_kind"],
+            row["scope"],
+            row["session_key"],
+            row["trial_key"],
+            row["path"],
+            row["native_path"],
+            row["format"],
+            row["status"],
+            row["is_canonical"],
+            row["created_at"],
+            row["parameter_hash"],
+            row["parameter_json"],
+            row["provenance_json"],
+            row["extras_json"],
+        ],
+    )
+
+
+def register_osim_artifacts(conn: CatalogConnection, rows: list[OsimArtifactRow]) -> None:
+    for row in rows:
+        register_osim_artifact(conn, row)
+
+
+def register_session_bundle(conn: CatalogConnection, session_dir: str | Path) -> SessionBundleDescriptor:
     """Discover and register one session bundle into the catalog."""
 
     descriptor = discover_session_bundle(session_dir)
@@ -31,7 +96,7 @@ def register_session_bundle(conn: duckdb.DuckDBPyConnection, session_dir: str | 
 
 
 def register_session_bundles(
-    conn: duckdb.DuckDBPyConnection,
+    conn: CatalogConnection,
     session_dirs: Iterable[str | Path],
 ) -> list[SessionBundleDescriptor]:
     """Register multiple session bundles into the catalog."""
@@ -41,13 +106,34 @@ def register_session_bundles(
     return descriptors
 
 
-def refresh_catalog(conn: duckdb.DuckDBPyConnection) -> None:
+def register_dataset_root(
+    conn: CatalogConnection,
+    root: str | Path,
+    *,
+    pattern: str = "sub-*/ses-*/motion",
+) -> list[SessionBundleDescriptor]:
+    """Discover and register all session bundles under a dataset root."""
+
+    root = Path(root)
+    conn.execute(
+        """
+        INSERT INTO movedb_catalog.catalog_settings (setting_key, setting_value)
+        VALUES ('dataset_root', ?)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = excluded.setting_value
+        """,
+        [str(root.resolve())],
+    )
+    session_dirs = sorted(path for path in root.glob(pattern) if path.is_dir())
+    return register_session_bundles(conn, session_dirs)
+
+
+def refresh_catalog(conn: CatalogConnection) -> None:
     """Refresh derived catalog views after registration changes."""
 
     create_catalog_views(conn)
 
 
-def _upsert_session(conn: duckdb.DuckDBPyConnection, descriptor: SessionBundleDescriptor) -> None:
+def _upsert_session(conn: CatalogConnection, descriptor: SessionBundleDescriptor) -> None:
     conn.execute(
         """
         INSERT INTO movedb_catalog.sessions (session_dir, subject_id, session_id)
@@ -60,7 +146,7 @@ def _upsert_session(conn: duckdb.DuckDBPyConnection, descriptor: SessionBundleDe
     )
 
 
-def _upsert_session_files(conn: duckdb.DuckDBPyConnection, descriptor: SessionBundleDescriptor) -> None:
+def _upsert_session_files(conn: CatalogConnection, descriptor: SessionBundleDescriptor) -> None:
     for file in descriptor.files:
         conn.execute(
             """

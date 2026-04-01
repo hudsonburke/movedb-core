@@ -1,7 +1,6 @@
-"""OpenSim integration module for movedb."""
-
 from __future__ import annotations
 
+from .hashing import canonical_json, parameter_hash, short_run_id
 from .types import (
     CMCParameters,
     IDParameters,
@@ -22,4 +21,7 @@ __all__ = [
     "CMCParameters",
     "make_artifact_id",
     "make_provenance",
+    "canonical_json",
+    "parameter_hash",
+    "short_run_id",
 ]
