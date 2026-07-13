@@ -3,26 +3,34 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import polars as pl
 
-from ..core import AnalogMeta, ForceplateMeta, MarkerMeta
+from ..core import (
+    AnalogMeta,
+    ForceplateMeta,
+    GRFMeta,
+    KinematicsMeta,
+    MarkerMeta,
+)
 from .metadata import (
     StorageMetadata,
     encode_storage_metadata,
     parse_signal_metadata,
     read_storage_metadata,
 )
-from .schemas import AnalogLongRow, EventRow, ForceplateLongRow, MarkerLongRow
+from .schemas import (
+    AnalogLongRow,
+    EventRow,
+    ForceplateLongRow,
+    MarkerLongRow,
+    validate_df,
+)
 from .validation import (
     validate_analogs_wide,
-    validate_analog_long,
-    validate_events,
     validate_forceplates_wide,
-    validate_forceplate_long,
     validate_markers_wide,
-    validate_marker_long,
 )
 
 
@@ -38,7 +46,9 @@ def write_markers_parquet(
     require_identity: bool = False,
 ) -> Path:
     validated = (
-        validate_marker_long(df) if format == "long" else validate_markers_wide(df, metadata, require_identity=require_identity)
+        validate_df(df, MarkerLongRow)
+        if format == "long"
+        else validate_markers_wide(df, metadata, require_identity=require_identity)
     )
     storage_metadata = StorageMetadata(
         schema_name="markers",
@@ -58,7 +68,9 @@ def write_analogs_parquet(
     require_identity: bool = False,
 ) -> Path:
     validated = (
-        validate_analog_long(df) if format == "long" else validate_analogs_wide(df, metadata, require_identity=require_identity)
+        validate_df(df, AnalogLongRow)
+        if format == "long"
+        else validate_analogs_wide(df, metadata, require_identity=require_identity)
     )
     storage_metadata = StorageMetadata(
         schema_name="analogs",
@@ -78,7 +90,9 @@ def write_forceplates_parquet(
     require_identity: bool = False,
 ) -> Path:
     validated = (
-        validate_forceplate_long(df) if format == "long" else validate_forceplates_wide(df, metadata, require_identity=require_identity)
+        validate_df(df, ForceplateLongRow)
+        if format == "long"
+        else validate_forceplates_wide(df, metadata, require_identity=require_identity)
     )
     storage_metadata = StorageMetadata(
         schema_name="forceplates",
@@ -95,7 +109,7 @@ def write_events_parquet(
     *,
     schema_name: str = "events",
 ) -> Path:
-    validated = validate_events(df)
+    validated = validate_df(df, EventRow)
     storage_metadata = StorageMetadata(schema_name=schema_name, format="long")
     return _write_parquet(validated, path, storage_metadata)
 
@@ -114,8 +128,7 @@ def read_forceplates_parquet(path: Path | str) -> tuple[pl.DataFrame, Forceplate
 
 def read_events_parquet(path: Path | str) -> tuple[pl.DataFrame, StorageMetadata | None]:
     df = pl.read_parquet(path)
-    validate_events(df)
-    return df, read_storage_metadata(path)
+    return validate_df(df, EventRow), read_storage_metadata(path)
 
 
 def scan_markers_parquet(path: Path | str) -> pl.LazyFrame:
@@ -131,7 +144,7 @@ def scan_forceplates_parquet(path: Path | str) -> pl.LazyFrame:
 
 
 def scan_events_parquet(path: Path | str) -> pl.LazyFrame:
-    return _scan_and_validate(path, EventRow)
+    return _scan_base_validated(path)
 
 
 def write_parquet(df: pl.DataFrame, path: Path | str, metadata: dict[str, Any] | None = None) -> Path:
@@ -156,27 +169,104 @@ def scan_parquet(path: Path | str) -> pl.LazyFrame:
     return pl.scan_parquet(path)
 
 
+# --- Kinematics Parquet I/O -------------------------------------------------
+
+
+def write_kinematics_parquet(
+    df: pl.DataFrame,
+    path: Path | str,
+    *,
+    format: Format,
+    metadata: KinematicsMeta,
+) -> Path:
+    """Write a kinematics DataFrame to Parquet with embedded metadata."""
+    validated = _assert_base_columns(df, format)
+    storage_metadata = StorageMetadata(
+        schema_name="kinematics",
+        format=format,
+        signal_type="kinematics",
+        metadata=metadata.model_dump(mode="json"),
+    )
+    return _write_parquet(validated, path, storage_metadata)
+
+
+def read_kinematics_parquet(
+    path: Path | str,
+) -> tuple[pl.DataFrame, KinematicsMeta | None, StorageMetadata | None]:
+    """Read a kinematics Parquet file, returning (df, metadata, storage_metadata)."""
+    return _read_signal_parquet(path, schema_name="kinematics")
+
+
+def scan_kinematics_parquet(path: Path | str) -> pl.LazyFrame:
+    """Lazily scan a kinematics Parquet file."""
+    return _scan_base_validated(path)
+
+
+# --- GRF Parquet I/O --------------------------------------------------------
+
+
+def write_grf_parquet(
+    df: pl.DataFrame,
+    path: Path | str,
+    *,
+    format: Format,
+    metadata: GRFMeta,
+) -> Path:
+    """Write a GRF DataFrame to Parquet with embedded metadata."""
+    validated = _assert_base_columns(df, format)
+    storage_metadata = StorageMetadata(
+        schema_name="grf",
+        format=format,
+        signal_type="grf",
+        metadata=metadata.model_dump(mode="json"),
+    )
+    return _write_parquet(validated, path, storage_metadata)
+
+
+def read_grf_parquet(
+    path: Path | str,
+) -> tuple[pl.DataFrame, GRFMeta | None, StorageMetadata | None]:
+    """Read a GRF Parquet file, returning (df, metadata, storage_metadata)."""
+    return _read_signal_parquet(path, schema_name="grf")
+
+
+def scan_grf_parquet(path: Path | str) -> pl.LazyFrame:
+    """Lazily scan a GRF Parquet file."""
+    return _scan_base_validated(path)
+
+
+# --- Internal helpers -------------------------------------------------------
+
+
+def _assert_base_columns(df: pl.DataFrame, format: Format) -> pl.DataFrame:
+    """Validate base columns present in all signal DataFrames, return df."""
+    required = {"time", "frame"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"Missing required columns in {format}-format DataFrame: {missing}"
+        )
+    return df
+
+
+
 def _read_signal_parquet(path: Path | str, *, schema_name: str) -> tuple[pl.DataFrame, Any | None, StorageMetadata | None]:
     df = pl.read_parquet(path)
     storage_metadata = read_storage_metadata(path)
     signal_meta = parse_signal_metadata(storage_metadata)
     df = _drop_optional_identity_columns(df)
+    fmt = storage_metadata.format if storage_metadata else "wide"
 
-    if schema_name == "markers":
-        if storage_metadata is not None and storage_metadata.format == "long":
-            validate_marker_long(df)
-        elif isinstance(signal_meta, MarkerMeta):
-            validate_markers_wide(df, cast(MarkerMeta, signal_meta))
-    elif schema_name == "analogs":
-        if storage_metadata is not None and storage_metadata.format == "long":
-            validate_analog_long(df)
-        elif isinstance(signal_meta, AnalogMeta):
-            validate_analogs_wide(df, cast(AnalogMeta, signal_meta))
-    elif schema_name == "forceplates":
-        if storage_metadata is not None and storage_metadata.format == "long":
-            validate_forceplate_long(df)
-        elif isinstance(signal_meta, ForceplateMeta):
-            validate_forceplates_wide(df, cast(ForceplateMeta, signal_meta))
+    if schema_name in ("markers", "analogs", "forceplates"):
+        _LONG_MODELS = {"markers": MarkerLongRow, "analogs": AnalogLongRow, "forceplates": ForceplateLongRow}
+        _WIDE_VALIDATORS = {"markers": validate_markers_wide, "analogs": validate_analogs_wide, "forceplates": validate_forceplates_wide}
+        if storage_metadata is not None and fmt == "long":
+            df = validate_df(df, _LONG_MODELS[schema_name])
+        elif signal_meta is not None:
+            df = _WIDE_VALIDATORS[schema_name](df, signal_meta)
+    # kinematics / grf: base-column check only (signal columns vary)
+    elif schema_name in ("kinematics", "grf") and storage_metadata is not None:
+        _assert_base_columns(df, fmt)
 
     return df, signal_meta, storage_metadata
 
@@ -186,6 +276,16 @@ def _write_parquet(df: pl.DataFrame, path: Path | str, metadata: StorageMetadata
     path.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(path, metadata=encode_storage_metadata(metadata))
     return path
+
+
+def _scan_base_validated(path: Path | str) -> pl.LazyFrame:
+    """Lazily scan and validate that base columns (time, frame) are present."""
+    lazy = pl.scan_parquet(path)
+    schema = lazy.collect_schema()
+    missing = [c for c in ("time", "frame") if c not in schema]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    return lazy
 
 
 def _scan_and_validate(path: Path | str, model: type[MarkerLongRow | AnalogLongRow | ForceplateLongRow | EventRow]) -> pl.LazyFrame:

@@ -5,9 +5,15 @@ from typing import Literal  # Better for static type checking than numpydantic.S
 # Common
 Array1D = NDArray[Literal["* frames"], np.float64]
 NArray1D = NDArray[Literal["* frames, * n"], np.float64]
+# (n_frames, n_channels) — scalar per channel per frame (kinematics, masks)
+NArray2D = NArray1D  # semantic alias: n_frames × n_channels
+
+# Boolean mask arrays stored as float64 (from nimblephysics)
+NArrayMask = NDArray[Literal["* frames, * n"], np.float64]
 
 Array3D = NDArray[Literal["* frames, 3 xyz"], np.float64]
 NArray3D = NDArray[Literal["* frames, * n, 3 xyz"], np.float64]
+
 
 # Forceplate-specific
 Origin = NDArray[Literal["3 xyz"], np.float64]

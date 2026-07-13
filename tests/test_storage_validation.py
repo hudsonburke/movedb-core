@@ -5,6 +5,7 @@ import polars as pl
 
 from movedb.adapters.polars import analogs_to_polars, forceplates_to_polars, markers_to_polars
 from movedb.core import AnalogData, ForceplateData, MarkerData
+from movedb.storage.schemas import MarkerWideValue
 from movedb.storage.validation import (
     _create_dynamic_wide_model,
     validate_analogs_wide,
@@ -14,8 +15,8 @@ from movedb.storage.validation import (
 
 
 def test_dynamic_wide_models_are_cached() -> None:
-    first = _create_dynamic_wide_model("markers", ("A", "B"), require_identity=False)
-    second = _create_dynamic_wide_model("markers", ("A", "B"), require_identity=False)
+    first = _create_dynamic_wide_model("MarkerWideRow", MarkerWideValue, ("A", "B"), require_identity=False)
+    second = _create_dynamic_wide_model("MarkerWideRow", MarkerWideValue, ("A", "B"), require_identity=False)
     assert first is second
 
 

@@ -9,7 +9,7 @@ import polars as pl
 
 from ..core import SessionParameters
 from .metadata import StorageMetadata, encode_storage_metadata, read_storage_metadata
-from .schemas import SessionParametersRow
+from .schemas import SessionParametersRow, validate_df
 
 T = TypeVar("T", bound=SessionParameters)
 
@@ -87,17 +87,4 @@ def scan_parameters_parquet(path: str | Path) -> pl.LazyFrame:
 def validate_parameters(df: pl.DataFrame) -> pl.DataFrame:
     """Validate a queryable session-parameters table."""
 
-    return SessionParametersRow.validate(_with_optional_parameter_columns(df))
-
-
-def _with_optional_parameter_columns(df: pl.DataFrame) -> pl.DataFrame:
-    missing = [name for name in SessionParametersRow.nullable_columns if name not in df.columns]
-    additions = [pl.lit(None, dtype=SessionParametersRow.dtypes[name]).alias(name) for name in missing]
-    recasts = [
-        pl.col(name).cast(SessionParametersRow.dtypes[name], strict=False).alias(name)
-        for name in SessionParametersRow.nullable_columns
-        if name in df.columns
-    ]
-    if not additions and not recasts:
-        return df
-    return df.with_columns([*additions, *recasts])
+    return validate_df(df, SessionParametersRow)

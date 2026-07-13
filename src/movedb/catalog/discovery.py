@@ -35,6 +35,8 @@ _CANONICAL_SESSION_FILES = {
     "forceplates": "forceplates.parquet",
     "events": "events.parquet",
     "parameters": "parameters.parquet",
+    "kinematics": "kinematics.parquet",
+    "grf": "grf.parquet",
 }
 
 

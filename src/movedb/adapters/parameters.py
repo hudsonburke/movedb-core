@@ -42,12 +42,6 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from ..core import SessionParameters
-from ..storage.parameters import (
-    read_parameters_json,
-    write_parameters_json,
-)
-
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -97,10 +91,8 @@ def write_parameters(params: BaseModel, path: str | Path) -> None:
     path
         Destination file path (e.g. ``sub-01/ses-01/parameters.json``).
     """
-    if isinstance(params, SessionParameters):
-        write_parameters_json(params, path)
-        return
-    Path(path).write_text(params.model_dump_json(indent=2))
+    from ..storage.parameters import write_parameters_json
+    write_parameters_json(params, path)
 
 
 def read_parameters(path: str | Path, model: type[T]) -> T:
@@ -118,6 +110,5 @@ def read_parameters(path: str | Path, model: type[T]) -> T:
     T
         A validated instance of *model*.
     """
-    if issubclass(model, SessionParameters):
-        return read_parameters_json(path, model)
-    return model.model_validate_json(Path(path).read_text())
+    from ..storage.parameters import read_parameters_json
+    return read_parameters_json(path, model)

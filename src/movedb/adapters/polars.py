@@ -7,6 +7,8 @@ from ..core import (
     AnalogData,
     Event,
     ForceplateData,
+    GRFData,
+    KinematicsData,
     MarkerData,
 )
 
@@ -323,3 +325,210 @@ def events_to_polars(
         rows.append(row)
 
     return pl.DataFrame(rows)
+
+
+def kinematics_to_polars(
+    kinematics: KinematicsData,
+    format: Literal["long", "wide"] = "wide",
+    trial_name: str | None = None,
+) -> pl.DataFrame:
+    """Convert joint kinematics to a Polars DataFrame.
+
+    Args:
+        kinematics: ``KinematicsData`` instance.
+        format:
+            - ``"wide"`` — one row per frame, one struct column per DOF
+              with fields ``{pos, vel, acc, tau}`` and optional mask fields.
+            - ``"long"`` — one row per ``(frame, dof)`` with flat columns
+              ``[time, frame, dof_name, pos, vel, acc, tau]``.
+        trial_name: If provided, a ``trial_name`` column is added.
+    """
+    pos = np.asarray(kinematics.pos)   # (n_frames, n_dofs)
+    vel = np.asarray(kinematics.vel)
+    acc = np.asarray(kinematics.acc)
+    tau = np.asarray(kinematics.tau)
+    dof_names = kinematics.names
+
+    n_frames, n_dofs = pos.shape
+    rate = kinematics.rate
+    first_frame = kinematics.first_frame
+
+    time = np.arange(n_frames) / rate
+    frames = np.arange(first_frame, first_frame + n_frames)
+
+    has_masks = (
+        kinematics.pos_observed is not None
+        and kinematics.vel_finite_differenced is not None
+        and kinematics.acc_finite_differenced is not None
+    )
+    if has_masks:
+        pos_obs = np.asarray(kinematics.pos_observed)
+        vel_fd = np.asarray(kinematics.vel_finite_differenced)
+        acc_fd = np.asarray(kinematics.acc_finite_differenced)
+
+    if format == "wide":
+        base_dict: dict[str, Any] = {"time": time, "frame": frames}
+        if trial_name is not None:
+            base_dict["trial_name"] = [trial_name] * n_frames
+        df = pl.DataFrame(base_dict)
+
+        struct_cols = []
+        for i, name in enumerate(dof_names):
+            fields = [
+                pl.Series("pos", pos[:, i]),
+                pl.Series("vel", vel[:, i]),
+                pl.Series("acc", acc[:, i]),
+                pl.Series("tau", tau[:, i]),
+            ]
+            if has_masks:
+                fields.append(pl.Series("pos_observed", pos_obs[:, i]))
+                fields.append(pl.Series("vel_finite_differenced", vel_fd[:, i]))
+                fields.append(pl.Series("acc_finite_differenced", acc_fd[:, i]))
+            struct_cols.append(pl.struct(fields).alias(name))
+
+        return df.with_columns(struct_cols)
+
+    elif format == "long":
+        time_repeated = np.repeat(time, n_dofs)
+        frame_repeated = np.repeat(frames, n_dofs)
+        dof_repeated = np.tile(dof_names, n_frames)
+
+        df_dict: dict[str, Any] = {
+            "time": time_repeated,
+            "frame": frame_repeated,
+            "dof_name": dof_repeated,
+            "pos": pos.flatten(),
+            "vel": vel.flatten(),
+            "acc": acc.flatten(),
+            "tau": tau.flatten(),
+        }
+        if trial_name is not None:
+            df_dict["trial_name"] = [trial_name] * len(time_repeated)
+        if has_masks:
+            df_dict["pos_observed"] = pos_obs.flatten()
+            df_dict["vel_finite_differenced"] = vel_fd.flatten()
+            df_dict["acc_finite_differenced"] = acc_fd.flatten()
+
+        return pl.DataFrame(df_dict)
+
+    else:
+        raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")
+
+
+def grf_to_polars(
+    grf: GRFData,
+    format: Literal["long", "wide"] = "wide",
+    trial_name: str | None = None,
+) -> pl.DataFrame:
+    """Convert ground reaction force data to a Polars DataFrame.
+
+    Args:
+        grf: ``GRFData`` instance.
+        format:
+            - ``"wide"`` — one row per frame, one struct column per body
+              with fields ``{fx, fy, fz, copx, copy, copz, tx, ty, tz}``
+              and optional root-frame + contact fields.
+            - ``"long"`` — one row per ``(frame, body)`` with flat columns.
+        trial_name: If provided, a ``trial_name`` column is added.
+    """
+    force = np.asarray(grf.force)   # (n_frames, n_bodies, 3)
+    cop = np.asarray(grf.cop)
+    torque = np.asarray(grf.torque)
+    body_names = grf.names
+
+    n_frames, n_bodies, _ = force.shape
+    rate = grf.rate
+    first_frame = grf.first_frame
+
+    time = np.arange(n_frames) / rate
+    frames = np.arange(first_frame, first_frame + n_frames)
+
+    has_root = (
+        grf.force_root is not None
+        and grf.cop_root is not None
+        and grf.torque_root is not None
+    )
+    if has_root:
+        force_root = np.asarray(grf.force_root)
+        cop_root = np.asarray(grf.cop_root)
+        torque_root = np.asarray(grf.torque_root)
+
+    has_contact = grf.contact is not None
+    if has_contact:
+        contact = np.asarray(grf.contact)
+
+    if format == "wide":
+        base_dict: dict[str, Any] = {"time": time, "frame": frames}
+        if trial_name is not None:
+            base_dict["trial_name"] = [trial_name] * n_frames
+        df = pl.DataFrame(base_dict)
+
+        struct_cols = []
+        for i, name in enumerate(body_names):
+            fields = [
+                pl.Series("fx", force[:, i, 0]),
+                pl.Series("fy", force[:, i, 1]),
+                pl.Series("fz", force[:, i, 2]),
+                pl.Series("copx", cop[:, i, 0]),
+                pl.Series("copy", cop[:, i, 1]),
+                pl.Series("copz", cop[:, i, 2]),
+                pl.Series("tx", torque[:, i, 0]),
+                pl.Series("ty", torque[:, i, 1]),
+                pl.Series("tz", torque[:, i, 2]),
+            ]
+            if has_root:
+                fields.extend([
+                    pl.Series("fx_root", force_root[:, i, 0]),
+                    pl.Series("fy_root", force_root[:, i, 1]),
+                    pl.Series("fz_root", force_root[:, i, 2]),
+                    pl.Series("copx_root", cop_root[:, i, 0]),
+                    pl.Series("copy_root", cop_root[:, i, 1]),
+                    pl.Series("copz_root", cop_root[:, i, 2]),
+                    pl.Series("tx_root", torque_root[:, i, 0]),
+                    pl.Series("ty_root", torque_root[:, i, 1]),
+                    pl.Series("tz_root", torque_root[:, i, 2]),
+                ])
+            if has_contact:
+                fields.append(pl.Series("contact", contact[:, i]))
+            struct_cols.append(pl.struct(fields).alias(name))
+
+        return df.with_columns(struct_cols)
+
+    elif format == "long":
+        time_repeated = np.repeat(time, n_bodies)
+        frame_repeated = np.repeat(frames, n_bodies)
+        body_repeated = np.tile(body_names, n_frames)
+
+        df_dict: dict[str, Any] = {
+            "time": time_repeated,
+            "frame": frame_repeated,
+            "body_name": body_repeated,
+            "fx": force[:, :, 0].flatten(),
+            "fy": force[:, :, 1].flatten(),
+            "fz": force[:, :, 2].flatten(),
+            "copx": cop[:, :, 0].flatten(),
+            "copy": cop[:, :, 1].flatten(),
+            "copz": cop[:, :, 2].flatten(),
+            "tx": torque[:, :, 0].flatten(),
+            "ty": torque[:, :, 1].flatten(),
+            "tz": torque[:, :, 2].flatten(),
+        }
+        if trial_name is not None:
+            df_dict["trial_name"] = [trial_name] * len(time_repeated)
+        if has_root:
+            df_dict["fx_root"] = force_root[:, :, 0].flatten()
+            df_dict["fy_root"] = force_root[:, :, 1].flatten()
+            df_dict["fz_root"] = force_root[:, :, 2].flatten()
+            df_dict["copx_root"] = cop_root[:, :, 0].flatten()
+            df_dict["copy_root"] = cop_root[:, :, 1].flatten()
+            df_dict["copz_root"] = cop_root[:, :, 2].flatten()
+            df_dict["tx_root"] = torque_root[:, :, 0].flatten()
+            df_dict["ty_root"] = torque_root[:, :, 1].flatten()
+            df_dict["tz_root"] = torque_root[:, :, 2].flatten()
+        if has_contact:
+            df_dict["contact"] = contact.flatten()
+
+        return pl.DataFrame(df_dict)
+
+    else:
+        raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")

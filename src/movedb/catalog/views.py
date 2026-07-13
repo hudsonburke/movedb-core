@@ -30,6 +30,8 @@ def create_bundle_views(conn: CatalogConnection, session_dir: str | Path) -> Non
         "markers_wide": session_dir / "markers.parquet",
         "analogs_wide": session_dir / "analogs.parquet",
         "forceplates_wide": session_dir / "forceplates.parquet",
+        "kinematics_wide": session_dir / "kinematics.parquet",
+        "grf_wide": session_dir / "grf.parquet",
         "events": session_dir / "events.parquet",
         "session_parameters": session_dir / "parameters.parquet",
     }
@@ -53,6 +55,8 @@ def create_catalog_views(conn: CatalogConnection) -> None:
     _create_registered_file_view(conn, "markers", view_name="markers")
     _create_registered_file_view(conn, "forceplates", view_name="forceplates")
     _create_registered_file_view(conn, "analogs", view_name="analogs")
+    _create_registered_file_view(conn, "kinematics", view_name="kinematics")
+    _create_registered_file_view(conn, "grf", view_name="grf")
     if _glob_exists(conn, "sub-*/ses-*/opensim/*_ik.parquet"):
         _create_glob_view(conn, "opensim_ik", relative_pattern="sub-*/ses-*/opensim/*_ik.parquet")
     if _glob_exists(conn, "sub-*/ses-*/opensim/*_id.parquet"):

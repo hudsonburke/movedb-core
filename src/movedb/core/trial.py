@@ -6,6 +6,8 @@ from .events import Event
 from .markers import MarkerData
 from .analogs import AnalogData
 from .forceplates import ForceplateData
+from .kinematics import KinematicsData
+from .grf import GRFData
 
 
 class TrialData(BaseModel):
@@ -21,6 +23,14 @@ class TrialData(BaseModel):
     analogs: AnalogData | None = Field(default=None, description="Analog channel data")
     forceplates: ForceplateData | None = Field(
         default=None, description="Force plate data"
+    )
+
+    # B3D-derived signal data
+    kinematics: KinematicsData | None = Field(
+        default=None, description="Joint kinematics (b3d-derived)"
+    )
+    grf: GRFData | None = Field(
+        default=None, description="Ground reaction force data (b3d-derived)"
     )
 
     # Events

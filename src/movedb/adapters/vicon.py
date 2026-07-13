@@ -37,5 +37,4 @@ def parse_mp_file(file_path, encoding: str = "utf-8") -> dict[str, Any]:
     return parameters
 
 
-def parse_vsk_file():
-    return
+

@@ -1,9 +1,7 @@
 # Storage Architecture
 
-MoveDB is moving to a Parquet-first architecture.
-
-The near-term goal is to make the Polars/Parquet layer explicit, typed, and
-stable before adding DuckDB as a catalog/query layer.
+MoveDB uses a Parquet-first architecture with DuckDB as the root-level
+orchestration and query layer.
 
 ## Direction
 
@@ -11,7 +9,7 @@ stable before adding DuckDB as a catalog/query layer.
 - Analytical projections use long/row-oriented schemas.
 - Patito is used where schemas are stable and tabular.
 - Wide session files use custom validation backed by typed metadata models.
-- DuckDB comes later as a catalog and cross-session query layer.
+- DuckDB sits above the canonical Parquet lake and queries it directly.
 
 ## Why Wide At Session Level
 
@@ -31,7 +29,7 @@ Long schemas are still important.
 - They are easier to validate with Patito.
 - They provide a stable contract across sessions with different marker sets.
 - They are easier to aggregate and query across sessions.
-- They will map cleanly onto the later DuckDB layer.
+- They map cleanly onto the DuckDB orchestration layer.
 
 Long schemas are the analytical contract.
 
@@ -63,13 +61,17 @@ projections.
 These projections can be computed lazily from session files and later
 materialized if needed.
 
-### Tier 3: DuckDB Catalog
+### Tier 3: DuckDB Orchestration Layer
 
-Once the storage contract stabilizes, DuckDB will sit above the session files.
+DuckDB sits above the session files and queries the Parquet lake directly at the
+dataset root.
 
 - query metadata across sessions
-- expose reusable analytical views
-- join long-form signal projections with session parameters and trial metadata
+- expose reusable root-level views over many Parquet files at once
+- join signal tables with session parameters and trial metadata
+- persist rebuildable orchestration tables such as session/trial metrics and
+  quality results
+- serve as the primary entrypoint for notebooks and broad interactive workflows
 
 ## Validation Strategy
 
@@ -87,14 +89,17 @@ Wide signal files are validated in layers:
 
 Long analytical tables use Patito models because they have stable row schemas.
 
-## Initial Implementation Scope
+## Current Implementation Scope
 
-The first implementation phase focuses on the storage layer.
+The current architecture separates canonical storage from orchestration.
 
-- add `movedb.storage`
-- define Patito models for long/event/base schemas
-- add typed Parquet read/write/scan helpers
-- add custom wide validators for session files
-- keep existing core ingest models unchanged
+- `movedb.storage` defines typed session-level Parquet contracts
+- conversion writes canonical session bundles only
+- DuckDB exposes root-level views over many session Parquet files
+- expensive reusable selection/orchestration results can be materialized in
+  DuckDB tables and refreshed from canonical Parquet
+- notebooks and batch workflows start from DuckDB, then drill down into session
+  Parquet only when needed for execution
 
-DuckDB work begins after these contracts settle.
+See also `docs/notebook-workflows.md` for the notebook/workbench integration
+pattern built on top of the DuckDB catalog.

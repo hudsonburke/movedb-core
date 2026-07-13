@@ -9,10 +9,10 @@ from typing import Any, Annotated
 import polars as pl
 from pydantic import BaseModel, Discriminator, TypeAdapter
 
-from ..core import AnalogMeta, ForceplateMeta, MarkerMeta
+from ..core import AnalogMeta, ForceplateMeta, GRFMeta, KinematicsMeta, MarkerMeta
 
 SignalMeta = Annotated[
-    MarkerMeta | AnalogMeta | ForceplateMeta,
+    MarkerMeta | AnalogMeta | ForceplateMeta | KinematicsMeta | GRFMeta,
     Discriminator("type"),
 ]
 
