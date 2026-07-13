@@ -16,11 +16,6 @@
 
 - [ ] OpenSim
 
-### Database
-
-- [ ] Local SQLite support
-- [ ] Supabase integration
-
 ### CLI
 
 - [ ] Would this be useful?

@@ -1,11 +1,6 @@
 # MoveDB Core
 
-<img src="imgs/MoveDB-Logo-nobg-cropped.png" width="40%">
-
-[![Tests](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/tests.yml/badge.svg)](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/tests.yml)
-[![CI/CD](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/ci-cd.yml)
-[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<img src="imgs/movedb-logo-cropped.png" width="40%">
 
 Core library for movement-data ingestion, typed biomechanics models, Parquet-
 based storage workflows, and DuckDB-backed dataset orchestration.
