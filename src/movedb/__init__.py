@@ -1,59 +1,23 @@
 """
-MoveDB Core - Movement Database Core Library
+MoveDB: A comprehensive library for movement database operations.
 
-A Python library for handling movement/biomechanics data including:
-- C3D file I/O operations
-- OpenSim integration
-- Time series data processing
+MoveDB provides tools for:
+- C3D file I/O and processing
+- Biomechanical data analysis
 - Motion capture data management
+- Force platform data processing
 """
 
-__version__ = "0.2.2"
-__author__ = "Hudson Burke"
-__email__ = "hudsonburke01@gmail.com"
+from . import core
+from . import adapters
+from . import storage
+from . import catalog
 
-# Import main classes for easy access
-from .core import (
-    MISSING,
-    MISSING_LIST,
-    UNSET,
-    AnalogChannel,
-    Analogs,
-    Event,
-    EZC3DForcePlatform,
-    ImportMethod,
-    MarkerTrajectory,
-    OpenSimOutput,
-    Points,
-    Sentinel,
-    TimeSeriesGroup,
-    Trial,
-)
-from .file_io import C3DLoader, parse_enf_file, sto_to_df
-from .utils import snake_to_pascal
 
+# Main exports
 __all__ = [
-    # Core classes
-    "Trial",
-    "Event",
-    "Points",
-    "Analogs",
-    "MarkerTrajectory",
-    "AnalogChannel",
-    "EZC3DForcePlatform",
-    "TimeSeriesGroup",
-    # Enums
-    "ImportMethod",
-    "OpenSimOutput",
-    # Sentinels
-    "Sentinel",
-    "MISSING",
-    "MISSING_LIST",
-    "UNSET",
-    # File I/O
-    "C3DLoader",
-    "sto_to_df",
-    "parse_enf_file",
-    # Utilities
-    "snake_to_pascal",
+    "core",
+    "adapters",
+    "storage",
+    "catalog",
 ]

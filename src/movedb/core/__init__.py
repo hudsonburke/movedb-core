@@ -1,30 +1,27 @@
-# Core data structures for biomechanical trial data
-from .enums import ImportMethod, OpenSimOutput
+# Core data structures for biomechanical data (pure Pydantic models)
 from .events import Event
-from .force_platforms import EZC3DForcePlatform
-from .sentinels import MISSING, MISSING_LIST, UNSET, Sentinel
-from .time_series import (
-    AnalogChannel,
-    Analogs,
-    MarkerTrajectory,
-    Points,
-    TimeSeriesGroup,
-)
-from .trial import Trial
+from .trial import TrialData
+from .analogs import AnalogData, AnalogMeta
+from .markers import MarkerData, MarkerMeta
+from .forceplates import ForceplateData, ForceplateMeta
+from .kinematics import KinematicsData, KinematicsMeta
+from .grf import GRFData, GRFMeta
+from .subject import SubjectMetadata
+from .parameters import SessionParameters
 
 __all__ = [
+    "AnalogData",
+    "AnalogMeta",
     "Event",
-    "TimeSeriesGroup",
-    "MarkerTrajectory",
-    "Points",
-    "AnalogChannel",
-    "Analogs",
-    "EZC3DForcePlatform",
-    "Trial",
-    "ImportMethod",
-    "OpenSimOutput",
-    "Sentinel",
-    "MISSING",
-    "MISSING_LIST",
-    "UNSET",
+    "ForceplateData",
+    "ForceplateMeta",
+    "GRFData",
+    "GRFMeta",
+    "KinematicsData",
+    "KinematicsMeta",
+    "MarkerData",
+    "MarkerMeta",
+    "SessionParameters",
+    "SubjectMetadata",
+    "TrialData",
 ]

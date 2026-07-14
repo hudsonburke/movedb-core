@@ -1,3 +1,5 @@
+*.db
+data/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -124,16 +126,9 @@ dmypy.json
 Thumbs.db
 
 # IDE
+*.code-workspace
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Project specific
-tests/data/*
-notebooks/*
-*.c3d
-*.trc
-*.mot
-*.sto
-*.osim
