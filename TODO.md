@@ -44,6 +44,7 @@
 
 ## Hail Mary
 
-- Rust rust rewrite of core library if performance becomes a bottleneck
+- Rust rewrite of core library if performance becomes a bottleneck
   - And so we can be cool
   - The structure has attempted to be largely data structure and functionally oriented in a way that would facilitate this rewrite
+  - More native algebraic data types might actually be a compelling reason to do this

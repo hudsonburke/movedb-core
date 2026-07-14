@@ -26,13 +26,13 @@ session bundles as the source of truth.
 
 MoveDB exposes generic notebook helpers in `movedb.catalog`:
 
-- `connect_workbench_catalog(...)`
-- `sql_list_subjects(...)`
-- `sql_list_sessions(...)`
-- `sql_list_trials(...)`
-- `register_scratch_views(...)`
-- `sql_compare_canonical_vs_scratch(...)`
-- `sql_current_view_preview(...)`
+- `connect_workbench_catalog(catalog_path, *, read_only=False)`
+- `sql_list_subjects(conn)`
+- `sql_list_sessions(conn, *, subject_id=...)`
+- `sql_list_trials(conn, *, subject_id=..., session_key=...)`
+- `register_scratch_views(conn, *, session_key=...)`
+- `sql_compare_canonical_vs_scratch(conn, *, trial_key=...)`
+- `sql_current_view_preview(conn, *, view_name=..., limit=25)`
 
 These helpers are intended to support project-specific notebook apps without
 duplicating DuckDB query utilities across repositories.
@@ -62,7 +62,7 @@ A project repository should usually keep three layers distinct.
 ## Scratch Outputs
 
 Notebook experiments should write to scratch space rather than canonical
-session `opensim/` or equivalent analysis directories.
+session bundles.
 
 Recommended pattern:
 
