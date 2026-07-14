@@ -27,6 +27,19 @@ from .parameters import (
     write_parameters,
     read_parameters,
 )
+from .b3d_ingest import (
+    discover_b3d_files,
+    resolve_b3d_path,
+    extract_subject_row,
+    extract_trial_rows,
+    extract_subject_kinematics,
+    extract_subject_markers,
+    extract_subject_grf,
+    extract_subject_forceplates,
+    ingest_b3d_dataset,
+    IngestStats,
+    B3DFileDescriptor,
+)
 
 __all__ = [
     # C3D extraction
@@ -54,4 +67,16 @@ __all__ = [
     "extract_parameters",
     "write_parameters",
     "read_parameters",
+    # B3D batch ingestion
+    "discover_b3d_files",
+    "resolve_b3d_path",
+    "extract_subject_row",
+    "extract_trial_rows",
+    "extract_subject_kinematics",
+    "extract_subject_markers",
+    "extract_subject_grf",
+    "extract_subject_forceplates",
+    "ingest_b3d_dataset",
+    "IngestStats",
+    "B3DFileDescriptor",
 ]

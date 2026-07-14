@@ -1,7 +1,7 @@
 [project]
 name = "movedb-core"
 version = "0.1.0"
-description = "Add your description here"
+description = "Core library for movement-data ingestion, storage, and querying"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,3 +13,6 @@ dependencies = [
   "pydantic>=2.12.5",
   "pyyaml>=6.0.3",
 ]
+
+[project.optional-dependencies]
+b3d = ["nimblephysics>=0.10.0", "tqdm>=4.60.0"]
