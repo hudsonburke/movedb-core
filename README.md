@@ -1,11 +1,6 @@
 # MoveDB Core
 
-<img src="imgs/MoveDB-Logo-nobg-cropped.png" width="40%">
-
-[![Tests](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/tests.yml/badge.svg)](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/tests.yml)
-[![CI/CD](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/SOMA-Bionics/movedb-core/actions/workflows/ci-cd.yml)
-[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<img src="imgs/movedb-logo-cropped.png" width="40%">
 
 Core library for movement-data ingestion, typed biomechanics models, Parquet-
 based storage workflows, and DuckDB-backed dataset orchestration.
@@ -15,11 +10,12 @@ based storage workflows, and DuckDB-backed dataset orchestration.
 MoveDB uses a Parquet-first architecture with DuckDB as the dataset-level
 query and orchestration layer.
 
-- ingest trial data from formats like C3D
+- ingest trial data from C3D files and AddBiomechanics `.b3d` files
 - represent signals with typed Pydantic models
 - serialize session bundles to Polars/Parquet
 - support both session-level processing and higher-level analytical workflows
 - expose dataset-level DuckDB views over canonical Parquet bundles
+- track OpenSim pipeline artifacts and provenance
 - support notebook and workflow orchestration on top of the catalog
 
 ## Storage Direction
@@ -31,17 +27,19 @@ The current implementation plan uses a tiered model.
 - Patito is used for fixed tabular schemas
 - wide session files use custom validation backed by typed metadata models
 
-See `docs/storage-architecture.md` for the working design and
+See `docs/dependencies.md` for introductions to each dependency and format,
+`docs/storage-architecture.md` for the working storage design, and
 `docs/notebook-workflows.md` for the notebook/workbench integration pattern.
 
 ## Core Capabilities
-
-- **C3D ingestion**: Parse markers, analogs, forceplates, and events
+- **C3D ingestion**: Parse markers, analogs, forceplates, and events from C3D files
+- **B3D ingestion**: Extract subject metadata, kinematics, GRF, and markers from AddBiomechanics `.b3d` files
 - **Typed models**: Pydantic domain models for signal metadata and trial data
 - **Polars adapters**: Convert core models to wide and long DataFrames
 - **Parquet storage**: Write self-describing Parquet files with embedded metadata
 - **Session workflows**: Support per-session bundles for subset distribution
 - **DuckDB catalog**: Query many canonical Parquet files directly at the dataset root
+- **OpenSim integration**: Track pipeline artifacts, parameters, and provenance
 - **Notebook helpers**: Support DuckDB-first interactive workflow selection and scratch inspection
 
 ## Current Architecture

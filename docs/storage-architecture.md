@@ -43,7 +43,9 @@ Each session stores canonical Parquet files such as:
 - `analogs.parquet`
 - `forceplates.parquet`
 - `events.parquet`
-- `parameters.json`
+- `kinematics.parquet`
+- `grf.parquet`
+- `parameters.parquet`
 
 These files are intended for direct session-level workflows and preserve the
 current wide/struct payloads for signals.
