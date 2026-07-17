@@ -1,18 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "movedb-core"
-version = "0.1.0"
-description = "Core library for movement-data ingestion, storage, and querying"
+version = "0.2.0"
+description = "Movement Database: batch import biomechanics data into Rerun .rrd files for visualization, cataloging, and querying"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
-  "duckdb>=1.5.0",
-  "ezc3d>=1.6.3",
-  "numpydantic>=1.8.0",
-  "patito[caching]>=0.8.6",
-  "polars>=1.38.1",
-  "pydantic>=2.12.5",
-  "pyyaml>=6.0.3",
+  "click>=8.0",
 ]
 
 [project.optional-dependencies]
-b3d = ["nimblephysics>=0.10.0", "tqdm>=4.60.0"]
+c3d = ["rerun-importer-c3d>=0.1.0"]
+osim = ["rerun-importer-osim>=0.1.0"]
+b3d = ["rerun-importer-b3d[b3d]>=0.1.0"]
+all = [
+  "movedb-core[c3d]",
+  "movedb-core[osim]",
+  "movedb-core[b3d]",
+  "rerun-sdk>=0.34.0",
+  "duckdb>=1.0.0",
+]
+
+[project.scripts]
+movedb = "movedb.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/movedb"]

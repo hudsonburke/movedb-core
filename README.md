@@ -1,59 +1,136 @@
-# MoveDB Core
+# MoveDB — Movement Database
 
-<img src="imgs/movedb-logo-cropped.png" width="40%">
+Batch-import biomechanics data into [Rerun](https://rerun.io) `.rrd` files,
+then visualize, catalog, and query across recordings.
 
-Core library for movement-data ingestion, typed biomechanics models, Parquet-
-based storage workflows, and DuckDB-backed dataset orchestration.
+```
+C3D files ──┐
+OSIM files ─┼──► movedb import ──► .rrd files ──► rerun server ──► Rerun Viewer
+B3D files ──┘                              │                    │
+                                            └──► DuckDB ──► SQL queries
+```
 
-## Current Focus
+## Quick start
 
-MoveDB uses a Parquet-first architecture with DuckDB as the dataset-level
-query and orchestration layer.
+```bash
+# Install
+pip install "movedb-core[all] @ git+https://github.com/hudsonburke/movedb-core.git"
 
-- ingest trial data from C3D files and AddBiomechanics `.b3d` files
-- represent signals with typed Pydantic models
-- serialize session bundles to Polars/Parquet
-- support both session-level processing and higher-level analytical workflows
-- expose dataset-level DuckDB views over canonical Parquet bundles
-- track OpenSim pipeline artifacts and provenance
-- support notebook and workflow orchestration on top of the catalog
+# Import C3D files grouped by subject
+movedb import c3d /data/c3d_root -o /data/rrd/
 
-## Storage Direction
+# Serve via the Rerun catalog server
+movedb catalog serve /data/rrd/
 
-The current implementation plan uses a tiered model.
+# Or query with SQL directly
+movedb catalog query /data/rrd/ "SELECT entity_path, value FROM scalars WHERE entity_path LIKE '%body_measurements/mass'"
+```
 
-- session motion files remain canonical in wide/struct form
-- long/row-oriented projections provide a stable analytical contract
-- Patito is used for fixed tabular schemas
-- wide session files use custom validation backed by typed metadata models
+## Why MoveDB?
 
-See `docs/dependencies.md` for introductions to each dependency and format,
-`docs/storage-architecture.md` for the working storage design, and
-`docs/notebook-workflows.md` for the notebook/workbench integration pattern.
+Biomechanics data lives in many formats — C3D, OpenSim models and results
+(.osim, .mot, .sto, .trc), AddBiomechanics (.b3d) — each with its own tools
+and workflows.  MoveDB provides a single entry point to convert all of them
+into a unified format that can be visualised, queried, and catalogued with
+modern data science tools.
 
-## Core Capabilities
-- **C3D ingestion**: Parse markers, analogs, forceplates, and events from C3D files
-- **B3D ingestion**: Extract subject metadata, kinematics, GRF, and markers from AddBiomechanics `.b3d` files
-- **Typed models**: Pydantic domain models for signal metadata and trial data
-- **Polars adapters**: Convert core models to wide and long DataFrames
-- **Parquet storage**: Write self-describing Parquet files with embedded metadata
-- **Session workflows**: Support per-session bundles for subset distribution
-- **DuckDB catalog**: Query many canonical Parquet files directly at the dataset root
-- **OpenSim integration**: Track pipeline artifacts, parameters, and provenance
-- **Notebook helpers**: Support DuckDB-first interactive workflow selection and scratch inspection
+**The conversion is a one-time cost.**  Run it on an x86_64 workstation (the
+only architecture with nimblephysics wheels), then the resulting `.rrd` files
+work on any platform — ARM64 laptops, cloud servers, anywhere Rerun runs.
 
-## Current Architecture
+## Commands
 
-The current implementation separates canonical storage from orchestration.
+| Command | What it does |
+|---------|-------------|
+| `movedb import c3d <dir> -o <out>` | Walk a directory for C3D files, group by subject, produce one `.rrd` per subject |
+| `movedb import osim <dir> -o <out>` | Walk a directory for OpenSim files, produce `.rrd` files |
+| `movedb import b3d <dir> -o <out>` | Walk a directory for B3D files, produce `.rrd` files (x86_64 only) |
+| `movedb catalog serve <path>` | Start the Rerun catalog server pointing at a directory of `.rrd` files |
+| `movedb catalog query <path> <sql>` | Query `.rrd` files with SQL using the DuckDB `rrd` extension |
+| `movedb info` | Show which importers and dependencies are available |
 
-- `movedb.storage` defines typed session-level Parquet contracts
-- session bundles remain the canonical operational payload
-- `movedb.catalog` exposes root-level DuckDB views over the Parquet lake
-- derived metrics and quality tables can be materialized in DuckDB and refreshed
-  from canonical Parquet
-- notebook and batch workflows begin at the DuckDB layer and drill into
-  session bundles only when needed
+## Architecture
+
+```
+                  ┌──────────────┐
+                  │  C3D files   │──┐
+                  └──────────────┘  │
+                  ┌──────────────┐  │  ┌──────────────────┐  ┌──────────────┐
+                  │ OpenSim files│──┼──┤ rerun-importer-* ├──┤  .rrd files  │
+                  └──────────────┘  │  └──────────────────┘  └──────┬───────┘
+                  ┌──────────────┐  │                               │
+                  │ B3D files*  │──┘                               │
+                  └──────────────┘                     ┌────────────┴────────────┐
+                  * x86_64 only                        │                         │
+                                                  ┌────▼────┐              ┌─────▼─────┐
+                                                  │  rerun  │              │  DuckDB   │
+                                                  │  server │              │  rrd ext  │
+                                                  └────┬────┘              └─────┬─────┘
+                                                       │                        │
+                                                  ┌────▼────┐              ┌────▼─────┐
+                                                  │  Rerun  │              │   SQL    │
+                                                  │  Viewer │              │  queries │
+                                                  └─────────┘              └──────────┘
+```
+
+### Importers
+
+Each importer is a standalone package on `$PATH` named `rerun-importer-*`.
+The Rerun Viewer discovers them automatically — drag a `.c3d` file onto the
+viewer and it just works.
+
+| Package | Format | Diagram | Dependencies | Arch |
+|---------|--------|---------|--------------|------|
+| [rerun-importer-c3d](https://github.com/hudsonburke/rerun-importer-c3d) | `.c3d` | Markers, force plates, analogs, events | `ezc3d` | all |
+| [rerun-importer-osim](https://github.com/hudsonburke/rerun-importer-osim) | `.osim`, `.mot`, `.sto`, `.trc` | Skeleton meshes, IK/ID/CMC time series | — | all |
+| [rerun-importer-b3d](https://github.com/hudsonburke/rerun-importer-b3d) | `.b3d` | Kinematics, GRF, markers, force plates | `nimblephysics` | x86_64 |
+
+### Catalog server
+
+The Rerun catalog server (`rr.server.Server`) indexes `.rrd` files and serves
+them over HTTP.  Connect the Rerun Viewer (`rerun --connect`) to browse and
+query across recordings with SQL.
+
+### DuckDB extension
+
+The `rrd` [DuckDB community extension](https://duckdb.org/community_extensions/list_of_extensions.html)
+reads `.rrd` files directly.  Query all your recordings in one SQL statement:
+
+```sql
+SELECT subject, AVG(value) as avg_mass
+FROM biomechanics.scalars
+WHERE entity_path LIKE '%body_measurements/mass'
+GROUP BY subject;
+```
+
+## Entity path conventions
+
+Every importer follows the same entity path scheme so queries work
+consistently across datasets:
+
+| Path pattern | Content |
+|-------------|---------|
+| `{subject}/subject/body_measurements/{param}` | Static subject parameters |
+| `{subject}/trials/{trial}/markers` | Per-frame marker positions |
+| `{subject}/trials/{trial}/ik/{dof}` | IK joint angles |
+| `{subject}/trials/{trial}/id/{dof}` | ID joint moments |
+| `{subject}/trials/{trial}/kinematics/{pass}/{dof}/{field}` | Kinematics pos/vel/acc/tau |
+| `{subject}/trials/{trial}/grf/{body}/{force\|cop}` | Ground reaction forces |
+| `{subject}/trials/{trial}/force_plates/{fp}/{force\|moment\|cop}` | Force plate data |
+| `{subject}/trials/{trial}/analogs/{channel}` | Analog time series |
+| `{subject}/trials/{trial}/events/{label}` | Trial events |
+| `{subject}/model/bodies/{name}/mesh` | Body geometry meshes |
+
+## Development
+
+```bash
+git clone https://github.com/hudsonburke/movedb-core.git
+cd movedb-core
+uv venv
+uv pip install -e ".[all]"
+movedb --help
+```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT
