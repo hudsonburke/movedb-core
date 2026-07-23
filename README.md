@@ -111,15 +111,22 @@ consistently across datasets:
 | Path pattern | Content |
 |-------------|---------|
 | `{subject}/subject/body_measurements/{param}` | Static subject parameters |
-| `{subject}/trials/{trial}/markers` | Per-frame marker positions |
-| `{subject}/trials/{trial}/ik/{dof}` | IK joint angles |
-| `{subject}/trials/{trial}/id/{dof}` | ID joint moments |
-| `{subject}/trials/{trial}/kinematics/{pass}/{dof}/{field}` | Kinematics pos/vel/acc/tau |
-| `{subject}/trials/{trial}/grf/{body}/{force\|cop}` | Ground reaction forces |
-| `{subject}/trials/{trial}/force_plates/{fp}/{force\|moment\|cop}` | Force plate data |
-| `{subject}/trials/{trial}/analogs/{channel}` | Analog time series |
-| `{subject}/trials/{trial}/events/{label}` | Trial events |
+| `{subject}/subject/metadata/group` | Treatment group (static text) |
+| `{subject}/subject/metadata/session` | Session (static text) |
+| `{subject}/trials/{session}_{trial}/markers` | Per-frame marker positions |
+| `{subject}/trials/{session}_{trial}/ik/{dof}` | IK joint angles |
+| `{subject}/trials/{session}_{trial}/id/{dof}` | ID joint moments |
+| `{subject}/trials/{session}_{trial}/kinematics/{pass}/{dof}/{field}` | Kinematics pos/vel/acc/tau |
+| `{subject}/trials/{session}_{trial}/grf/{body}/{force\|cop}` | Ground reaction forces |
+| `{subject}/trials/{session}_{trial}/force_plates/{fp}/{force\|moment\|cop}` | Force plate data |
+| `{subject}/trials/{session}_{trial}/analogs/{channel}` | Analog time series |
+| `{subject}/trials/{session}_{trial}/events/{label}` | Trial events |
 | `{subject}/model/bodies/{name}/mesh` | Body geometry meshes |
+
+**Session** is extracted from the directory structure
+(e.g. ``sourcedata/BAA01/Baseline/Walk01.c3d`` → session=``Baseline``).
+**Group** is loaded from an optional JSON mapping file passed via
+``--group-map groups.json``.
 
 ## Development
 
