@@ -1,4 +1,4 @@
-# MoveDB Core
+# MoveDB
 
 A Python library for biomechanics data management using Parquet-based storage and DuckDB catalog queries.
 
@@ -31,20 +31,44 @@ Core Models:
 └── AnalogData             # Analog signals
 ```
 
+## Data Directory Convention
+
+Raw and processed data should be stored in separate directories:
+
+```
+data/
+├── raw/                   # Original C3D/B3D files (immutable)
+│   ├── sourcedata/
+│   └── ...
+├── processed/             # Parquet files, DuckDB catalog
+│   ├── markers.parquet
+│   ├── forceplates.parquet
+│   ├── catalog.db
+│   └── ...
+└── results/               # Analysis outputs (IK, ID, Moco)
+    ├── ik/
+    ├── id/
+    └── moco/
+```
+
+This separation ensures:
+- Raw data is never modified
+- Processed data can be regenerated from raw
+- Results are clearly separated from source data
+
 ## Installation
 
 ```bash
-pip install movedb-core
-```
+# Clone and install in development mode
+git clone https://github.com/hudsonburke/movedb.git
+cd movedb
+pip install -e .
 
-For C3D file support:
-```bash
-pip install movedb-core[c3d]
-```
+# For C3D file support
+pip install -e ".[c3d]"
 
-For B3D file support:
-```bash
-pip install movedb-core[b3d]
+# For B3D file support
+pip install -e ".[b3d]"
 ```
 
 ## Usage
