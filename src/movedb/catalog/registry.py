@@ -19,7 +19,6 @@ from .sql import (
     CREATE_TRIAL_QUALITY_TABLE_SQL,
 )
 from .views import create_catalog_views
-from ..osim.types import OsimArtifactRow
 
 
 def initialize_catalog(conn: CatalogConnection) -> None:
