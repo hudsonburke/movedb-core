@@ -7,18 +7,12 @@ from pathlib import Path
 from .protocols import CatalogConnection
 from .sql import (
     ID_TRIALS_VIEW_SQL,
-    OSIM_SESSIONS_VIEW_SQL,
     QUALIFIED_TRIALS_VIEW_SQL,
     SESSION_SELECTION_METRICS_VIEW_SQL,
     SESSION_INVENTORY_VIEW_SQL,
     TRIAL_SELECTION_METRICS_VIEW_SQL,
     TRIALS_VIEW_SQL,
     TRIAL_MANIFEST_VIEW_SQL,
-    OSIM_ARTIFACTS_VIEW_SQL,
-    OSIM_IK_VIEW_SQL,
-    OSIM_ID_VIEW_SQL,
-    LATEST_OSIM_IK_VIEW_SQL,
-    LATEST_OSIM_ID_VIEW_SQL,
 )
 
 
@@ -63,14 +57,8 @@ def create_catalog_views(conn: CatalogConnection) -> None:
         _create_glob_view(conn, "opensim_id", relative_pattern="sub-*/ses-*/opensim/*_id.parquet")
     conn.execute(SESSION_SELECTION_METRICS_VIEW_SQL)
     conn.execute(TRIAL_SELECTION_METRICS_VIEW_SQL)
-    conn.execute(OSIM_SESSIONS_VIEW_SQL)
     conn.execute(QUALIFIED_TRIALS_VIEW_SQL)
     conn.execute(ID_TRIALS_VIEW_SQL)
-    conn.execute(OSIM_ARTIFACTS_VIEW_SQL)
-    conn.execute(OSIM_IK_VIEW_SQL)
-    conn.execute(OSIM_ID_VIEW_SQL)
-    conn.execute(LATEST_OSIM_IK_VIEW_SQL)
-    conn.execute(LATEST_OSIM_ID_VIEW_SQL)
 
 
 def _has_file_kind(conn: CatalogConnection, file_kind: str) -> bool:

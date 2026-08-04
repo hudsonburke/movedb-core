@@ -224,10 +224,6 @@ FROM movedb_catalog.trial_metrics;
 """
 
 OSIM_SESSIONS_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.osim_sessions AS
-SELECT *
-FROM movedb_catalog.session_quality
-WHERE qualifies_for_osim = TRUE;
 """
 
 QUALIFIED_TRIALS_VIEW_SQL = """
@@ -245,62 +241,19 @@ WHERE qualifies_for_id = TRUE;
 """
 
 CREATE_OSIM_ARTIFACTS_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS movedb_catalog.osim_artifacts (
-    artifact_id TEXT PRIMARY KEY,
-    run_id TEXT,
-    pipeline TEXT,
-    output_kind TEXT,
-    scope TEXT,
-    session_key TEXT,
-    trial_key TEXT,
-    path TEXT,
-    native_path TEXT,
-    format TEXT,
-    status TEXT,
-    is_canonical BOOLEAN,
-    created_at TEXT,
-    parameter_hash TEXT,
-    parameter_json TEXT,
-    provenance_json TEXT,
-    extras_json TEXT
-);
 """
 
 OSIM_ARTIFACTS_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.osim_artifacts_view AS
-SELECT * FROM movedb_catalog.osim_artifacts;
 """
 
 OSIM_IK_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.osim_ik AS
-SELECT * FROM movedb_catalog.osim_artifacts WHERE pipeline = 'ik';
 """
 
 OSIM_ID_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.osim_id AS
-SELECT * FROM movedb_catalog.osim_artifacts WHERE pipeline = 'id';
 """
 
 LATEST_OSIM_IK_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.latest_osim_ik AS
-SELECT * FROM (
-    SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY session_key, trial_key
-        ORDER BY created_at DESC, run_id DESC
-    ) AS rn
-    FROM movedb_catalog.osim_artifacts
-    WHERE pipeline = 'ik'
-) WHERE rn = 1;
 """
 
 LATEST_OSIM_ID_VIEW_SQL = """
-CREATE OR REPLACE VIEW movedb_catalog.latest_osim_id AS
-SELECT * FROM (
-    SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY session_key, trial_key
-        ORDER BY created_at DESC, run_id DESC
-    ) AS rn
-    FROM movedb_catalog.osim_artifacts
-    WHERE pipeline = 'id'
-) WHERE rn = 1;
 """
