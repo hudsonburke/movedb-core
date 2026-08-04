@@ -1,10 +1,23 @@
 """
-MoveDB — Movement Database.
+MoveDB: A comprehensive library for movement database operations.
 
-Batch-import biomechanics data into Rerun .rrd files for visualization,
-cataloging, and cross-recording SQL queries.
-
-See ``movedb.cli`` for the CLI interface.
+MoveDB provides tools for:
+- C3D file I/O and processing
+- Biomechanical data analysis
+- Motion capture data management
+- Force platform data processing
 """
 
-__version__ = "0.2.0"
+from . import core
+from . import adapters
+from . import storage
+from . import catalog
+
+
+# Main exports
+__all__ = [
+    "core",
+    "adapters",
+    "storage",
+    "catalog",
+]
