@@ -18,6 +18,18 @@ from .parameters import (
     write_parameters,
     read_parameters,
 )
+from .b3d_ingest import (
+    discover_b3d_files,
+    resolve_b3d_path,
+    ingest_b3d_dataset,
+    IngestStats,
+    B3DFileDescriptor,
+)
+from .b3d_catalog import (
+    b3d_subject_to_row,
+    b3d_trial_to_row,
+)
+
 
 __all__ = [
     # C3D extraction
@@ -37,4 +49,13 @@ __all__ = [
     "extract_parameters",
     "write_parameters",
     "read_parameters",
+    # B3D ingestion
+    "discover_b3d_files",
+    "resolve_b3d_path",
+    "ingest_b3d_dataset",
+    "IngestStats",
+    "B3DFileDescriptor",
+    # B3D catalog
+    "b3d_subject_to_row",
+    "b3d_trial_to_row",
 ]
