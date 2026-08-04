@@ -24,8 +24,6 @@ all = [
   "duckdb>=1.0.0",
 ]
 
-[project.scripts]
-movedb = "movedb.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/movedb"]
