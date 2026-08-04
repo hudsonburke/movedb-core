@@ -6,7 +6,7 @@ from typing import Literal  # Better for static type checking than numpydantic.S
 Array1D = NDArray[Literal["* frames"], np.float64]
 NArray1D = NDArray[Literal["* frames, * n"], np.float64]
 # (n_frames, n_channels) — scalar per channel per frame (kinematics, masks)
-NArray2D = NArray1D  # semantic alias: n_frames × n_channels
+NArray2D = NDArray[Literal["* frames, * channels"], np.float64]
 
 # Boolean mask arrays stored as float64 (from nimblephysics)
 NArrayMask = NDArray[Literal["* frames, * n"], np.float64]
