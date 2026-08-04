@@ -28,8 +28,6 @@ all = [
   "movedb-core[rerun]",
 ]
 
-[project.scripts]
-movedb = "movedb.cli:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/movedb"]
