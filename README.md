@@ -1,141 +1,132 @@
-# MoveDB — Movement Database
+# MoveDB Core
 
-Batch-import biomechanics data into [Rerun](https://rerun.io) `.rrd` files,
-then visualize, catalog, and query across recordings.
-
-```
-C3D files ──┐
-OSIM files ─┼──► movedb import ──► .rrd files ──► rerun server ──► Rerun Viewer
-B3D files ──┘                              │                    │
-                                            └──► DuckDB ──► SQL queries
-```
-
-## Quick start
-
-```bash
-# Install
-pip install "movedb-core[all] @ git+https://github.com/hudsonburke/movedb-core.git"
-
-# Import C3D files grouped by subject
-movedb import c3d /data/c3d_root -o /data/rrd/
-
-# Serve via the Rerun catalog server
-movedb catalog serve /data/rrd/
-
-# Or query with SQL directly
-movedb catalog query /data/rrd/ "SELECT entity_path, value FROM scalars WHERE entity_path LIKE '%body_measurements/mass'"
-```
-
-## Why MoveDB?
-
-Biomechanics data lives in many formats — C3D, OpenSim models and results
-(.osim, .mot, .sto, .trc), AddBiomechanics (.b3d) — each with its own tools
-and workflows.  MoveDB provides a single entry point to convert all of them
-into a unified format that can be visualised, queried, and catalogued with
-modern data science tools.
-
-**The conversion is a one-time cost.**  Run it on an x86_64 workstation (the
-only architecture with nimblephysics wheels), then the resulting `.rrd` files
-work on any platform — ARM64 laptops, cloud servers, anywhere Rerun runs.
-
-## Commands
-
-| Command | What it does |
-|---------|-------------|
-| `movedb import c3d <dir> -o <out>` | Walk a directory for C3D files, group by subject, produce one `.rrd` per subject |
-| `movedb import osim <dir> -o <out>` | Walk a directory for OpenSim files, produce `.rrd` files |
-| `movedb import b3d <dir> -o <out>` | Walk a directory for B3D files, produce `.rrd` files (x86_64 only) |
-| `movedb catalog serve <path>` | Start the Rerun catalog server pointing at a directory of `.rrd` files |
-| `movedb catalog query <path> <sql>` | Query `.rrd` files with SQL using the DuckDB `rrd` extension |
-| `movedb info` | Show which importers and dependencies are available |
+A Python library for biomechanics data management using Parquet-based storage and DuckDB catalog queries.
 
 ## Architecture
 
 ```
-                  ┌──────────────┐
-                  │  C3D files   │──┐
-                  └──────────────┘  │
-                  ┌──────────────┐  │  ┌──────────────────┐  ┌──────────────┐
-                  │ OpenSim files│──┼──┤ rerun-importer-* ├──┤  .rrd files  │
-                  └──────────────┘  │  └──────────────────┘  └──────┬───────┘
-                  ┌──────────────┐  │                               │
-                  │ B3D files*  │──┘                               │
-                  └──────────────┘                     ┌────────────┴────────────┐
-                  * x86_64 only                        │                         │
-                                                  ┌────▼────┐              ┌─────▼─────┐
-                                                  │  rerun  │              │  DuckDB   │
-                                                  │  server │              │  rrd ext  │
-                                                  └────┬────┘              └─────┬─────┘
-                                                       │                        │
-                                                  ┌────▼────┐              ┌────▼─────┐
-                                                  │  Rerun  │              │   SQL    │
-                                                  │  Viewer │              │  queries │
-                                                  └─────────┘              └──────────┘
+Storage Layer (Parquet):
+├── markers.parquet        # Marker positions (wide or long format)
+├── forceplates.parquet    # Force plate data (forces, moments, COP)
+├── kinematics.parquet     # IK results (joint angles)
+├── grf.parquet            # Ground reaction forces
+├── events.parquet         # Gait events (foot strike/off)
+├── parameters.parquet     # Session parameters (mass, height, etc.)
+└── analogs.parquet        # Analog signals
+
+Catalog Layer (DuckDB):
+├── sessions               # All sessions with metadata
+├── trials                 # All trials with quality metrics
+├── session_files          # File registry (what files exist where)
+├── session_metrics        # Quality metrics per session
+├── trial_metrics          # Quality metrics per trial
+└── views                  # Pre-built SQL queries
+
+Core Models:
+├── KinematicsData         # Joint positions, velocities, accelerations, torques
+├── ForceplateData         # Forces, moments, COP, calibration matrices
+├── MarkerData             # Marker positions
+├── EventData              # Gait events
+├── GRFData                # Ground reaction forces
+└── AnalogData             # Analog signals
 ```
 
-### Importers
+## Installation
 
-Each importer is a standalone package on `$PATH` named `rerun-importer-*`.
-The Rerun Viewer discovers them automatically — drag a `.c3d` file onto the
-viewer and it just works.
-
-| Package | Format | Diagram | Dependencies | Arch |
-|---------|--------|---------|--------------|------|
-| [rerun-importer-c3d](https://github.com/hudsonburke/rerun-importer-c3d) | `.c3d` | Markers, force plates, analogs, events | `ezc3d` | all |
-| [rerun-importer-osim](https://github.com/hudsonburke/rerun-importer-osim) | `.osim`, `.mot`, `.sto`, `.trc` | Skeleton meshes, IK/ID/CMC time series | — | all |
-| [rerun-importer-b3d](https://github.com/hudsonburke/rerun-importer-b3d) | `.b3d` | Kinematics, GRF, markers, force plates | `nimblephysics` | x86_64 |
-
-### Catalog server
-
-The Rerun catalog server (`rr.server.Server`) indexes `.rrd` files and serves
-them over HTTP.  Connect the Rerun Viewer (`rerun --connect`) to browse and
-query across recordings with SQL.
-
-### DuckDB extension
-
-The `rrd` [DuckDB community extension](https://duckdb.org/community_extensions/list_of_extensions.html)
-reads `.rrd` files directly.  Query all your recordings in one SQL statement:
-
-```sql
-SELECT subject, AVG(value) as avg_mass
-FROM biomechanics.scalars
-WHERE entity_path LIKE '%body_measurements/mass'
-GROUP BY subject;
+```bash
+pip install movedb-core
 ```
 
-## Entity path conventions
+For C3D file support:
+```bash
+pip install movedb-core[c3d]
+```
 
-Every importer follows the same entity path scheme so queries work
-consistently across datasets:
+For B3D file support:
+```bash
+pip install movedb-core[b3d]
+```
 
-| Path pattern | Content |
-|-------------|---------|
-| `{subject}/subject/body_measurements/{param}` | Static subject parameters |
-| `{subject}/subject/metadata/group` | Treatment group (static text) |
-| `{subject}/subject/metadata/session` | Session (static text) |
-| `{subject}/trials/{session}_{trial}/markers` | Per-frame marker positions |
-| `{subject}/trials/{session}_{trial}/ik/{dof}` | IK joint angles |
-| `{subject}/trials/{session}_{trial}/id/{dof}` | ID joint moments |
-| `{subject}/trials/{session}_{trial}/kinematics/{pass}/{dof}/{field}` | Kinematics pos/vel/acc/tau |
-| `{subject}/trials/{session}_{trial}/grf/{body}/{force\|cop}` | Ground reaction forces |
-| `{subject}/trials/{session}_{trial}/force_plates/{fp}/{force\|moment\|cop}` | Force plate data |
-| `{subject}/trials/{session}_{trial}/analogs/{channel}` | Analog time series |
-| `{subject}/trials/{session}_{trial}/events/{label}` | Trial events |
-| `{subject}/model/bodies/{name}/mesh` | Body geometry meshes |
+## Usage
 
-**Session** is extracted from the directory structure
-(e.g. ``sourcedata/BAA01/Baseline/Walk01.c3d`` → session=``Baseline``).
-**Group** is loaded from an optional JSON mapping file passed via
-``--group-map groups.json``.
+### Storage Layer
+
+```python
+from movedb.storage import write_markers_parquet, read_markers_parquet
+from movedb.core import MarkerData, MarkerMeta
+
+# Write markers to Parquet
+meta = MarkerMeta(
+    marker_names=["r_asis", "l_asis", "r_knee", "l_knee"],
+    rate=200.0,
+    units="mm",
+)
+write_markers_parquet(df, "markers.parquet", format="wide", metadata=meta)
+
+# Read markers from Parquet
+df = read_markers_parquet("markers.parquet")
+```
+
+### Catalog Layer
+
+```python
+from movedb.catalog import connect_catalog, register_session_bundle
+
+# Create a catalog
+conn = connect_catalog("catalog.db")
+
+# Register a session bundle
+register_session_bundle(conn, "/path/to/session")
+
+# Query trials
+result = conn.execute("SELECT * FROM trials WHERE qualifies_for_ik = TRUE")
+```
+
+### Core Models
+
+```python
+from movedb.core import KinematicsData, MarkerData, EventData
+
+# Create kinematics data
+kin = KinematicsData(
+    names=["hip_flexion_r", "knee_angle_r"],
+    rate=200.0,
+    units="rad",
+    pos=pos_array,  # (n_frames, 2)
+    vel=vel_array,
+    acc=acc_array,
+    tau=tau_array,
+)
+```
+
+## Data Flow
+
+```
+C3D files → Parquet storage → DuckDB catalog → Analysis pipeline
+                                                    ↓
+                                            IK/ID/MocoInverse
+                                                    ↓
+                                            Results (Parquet)
+```
+
+## Dependencies
+
+- `numpy` — Array operations
+- `numpydantic` — Type-safe array validation
+- `pydantic` — Data model validation
+- `patito` — Polars DataFrame validation
+- `polars` — DataFrame operations
+- `duckdb` — Catalog queries
+- `click` — CLI interface
 
 ## Development
 
 ```bash
-git clone https://github.com/hudsonburke/movedb-core.git
-cd movedb-core
-uv venv
-uv pip install -e ".[all]"
-movedb --help
+# Install in development mode
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/
 ```
 
 ## License
