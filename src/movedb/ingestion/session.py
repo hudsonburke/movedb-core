@@ -26,6 +26,9 @@ def process_session(
     Reads C3D files using movedb-core's adapters, converts to Polars
     DataFrames using the polars adapter, and writes Parquet files.
 
+    Uses "long" format for markers and force plates to handle different
+    marker/force plate sets across trials within the same subject.
+
     Parameters
     ----------
     subject_id : str
@@ -63,19 +66,19 @@ def process_session(
             # Load with extract_forceplat_data=True so force plate data is available
             c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
 
-            # Extract markers (always available)
+            # Extract markers — use long format to handle different marker sets
             marker_data = extract_markers(c3d)
-            markers_df = markers_to_polars(marker_data, trial_name=trial_name)
+            markers_df = markers_to_polars(marker_data, format="long", trial_name=trial_name)
             markers_df = markers_df.with_columns([
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
             ])
             all_markers.append(markers_df)
 
-            # Extract force plates (may fail if no force plate data)
+            # Extract force plates — use long format
             try:
                 fp_data = extract_forceplates(c3d)
-                fp_df = forceplates_to_polars(fp_data, trial_name=trial_name)
+                fp_df = forceplates_to_polars(fp_data, format="long", trial_name=trial_name)
                 fp_df = fp_df.with_columns([
                     pl.lit(subject_id).alias("subject_id"),
                     pl.lit(session).alias("session_id"),
