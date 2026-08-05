@@ -60,9 +60,10 @@ def process_session(
         trial_name = c3d_path.stem
 
         try:
-            c3d = ezc3d.c3d(str(c3d_path))
+            # Load with extract_forceplat_data=True so force plate data is available
+            c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
 
-            # Extract + convert using movedb-core adapters
+            # Extract markers (always available)
             marker_data = extract_markers(c3d)
             markers_df = markers_to_polars(marker_data, trial_name=trial_name)
             markers_df = markers_df.with_columns([
@@ -71,14 +72,19 @@ def process_session(
             ])
             all_markers.append(markers_df)
 
-            fp_data = extract_forceplates(c3d)
-            fp_df = forceplates_to_polars(fp_data, trial_name=trial_name)
-            fp_df = fp_df.with_columns([
-                pl.lit(subject_id).alias("subject_id"),
-                pl.lit(session).alias("session_id"),
-            ])
-            all_forceplates.append(fp_df)
+            # Extract force plates (may fail if no force plate data)
+            try:
+                fp_data = extract_forceplates(c3d)
+                fp_df = forceplates_to_polars(fp_data, trial_name=trial_name)
+                fp_df = fp_df.with_columns([
+                    pl.lit(subject_id).alias("subject_id"),
+                    pl.lit(session).alias("session_id"),
+                ])
+                all_forceplates.append(fp_df)
+            except (ValueError, KeyError) as e:
+                logger.debug(f"  {trial_name}: no force plate data: {e}")
 
+            # Extract events (may be empty)
             events = extract_events(c3d)
             events_df = events_to_polars(events, trial_name=trial_name)
             events_df = events_df.with_columns([
