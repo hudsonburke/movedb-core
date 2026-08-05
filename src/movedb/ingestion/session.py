@@ -14,6 +14,20 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
+# Columns that should always be String type (some C3D files have numeric names)
+STRING_COLUMNS = ["marker_name", "trial_name", "subject_id", "session_id", "context", "label"]
+
+
+def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
+    """Cast known string columns to Utf8 type to prevent type mismatches."""
+    casts = []
+    for col in df.columns:
+        if col in STRING_COLUMNS and df[col].dtype != pl.Utf8:
+            casts.append(pl.col(col).cast(pl.Utf8))
+    if casts:
+        df = df.with_columns(casts)
+    return df
+
 
 def process_session(
     subject_id: str,
@@ -73,6 +87,7 @@ def process_session(
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
             ])
+            markers_df = _ensure_string_types(markers_df)
             all_markers.append(markers_df)
 
             # Extract force plates — use long format
@@ -83,6 +98,7 @@ def process_session(
                     pl.lit(subject_id).alias("subject_id"),
                     pl.lit(session).alias("session_id"),
                 ])
+                fp_df = _ensure_string_types(fp_df)
                 all_forceplates.append(fp_df)
             except (ValueError, KeyError) as e:
                 logger.debug(f"  {trial_name}: no force plate data: {e}")
@@ -94,6 +110,7 @@ def process_session(
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
             ])
+            events_df = _ensure_string_types(events_df)
             if not events_df.is_empty():
                 all_events.append(events_df)
 
