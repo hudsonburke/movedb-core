@@ -26,8 +26,7 @@ from .b3d_ingest import (
     B3DFileDescriptor,
 )
 from .b3d_catalog import (
-    b3d_subject_to_row,
-    b3d_trial_to_row,
+    create_b3d_catalog,
 )
 
 
@@ -56,6 +55,5 @@ __all__ = [
     "IngestStats",
     "B3DFileDescriptor",
     # B3D catalog
-    "b3d_subject_to_row",
-    "b3d_trial_to_row",
+    "create_b3d_catalog",
 ]
