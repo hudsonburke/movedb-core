@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Columns that should always be String type (some C3D files have numeric names)
 STRING_COLUMNS = ["marker_name", "trial_name", "subject_id", "session_id", "context", "label"]
 
+
 def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     """Cast known string columns to Utf8 type to prevent type mismatches."""
     casts = []
@@ -29,20 +30,7 @@ def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def extract_session_params(c3d_path: Path) -> dict[str, float | str]:
-    """Extract all PROCESSING parameters from a C3D file.
-
-    Parameters
-    ----------
-    c3d_path : Path
-        Path to the C3D file.
-
-    Returns
-    -------
-    dict[str, float | str]
-        Dictionary of parameter names to values. Missing parameters
-        are omitted (not set to None/NaN). Non-numeric values are
-        stored as strings.
-    """
+    """Extract all PROCESSING parameters from a C3D file."""
     import ezc3d
 
     c3d = ezc3d.c3d(str(c3d_path))
@@ -57,7 +45,6 @@ def extract_session_params(c3d_path: Path) -> dict[str, float | str]:
             val = value[0]
             if val is None:
                 continue
-            # Try numeric conversion, fall back to string
             try:
                 params[param_name] = float(val)
             except (ValueError, TypeError):
@@ -74,31 +61,8 @@ def process_session(
 ) -> dict[str, pl.DataFrame]:
     """Convert a session's C3D files to Parquet.
 
-    Reads C3D files using movedb-core's adapters, converts to Polars
-    DataFrames using the polars adapter, and writes Parquet files.
-
-    Uses "long" format for markers and force plates to handle different
-    marker/force plate sets across trials within the same subject.
-
     Also extracts PROCESSING parameters (mass, bone lengths) from C3D files
     and writes them to sessions.parquet for use in model scaling.
-
-    Parameters
-    ----------
-    subject_id : str
-        Subject identifier (e.g. "BAA01").
-    session : str
-        Session name (e.g. "Baseline", "Week24").
-    c3d_files : list[str | Path]
-        List of C3D file paths for this session.
-    output_dir : str | Path
-        Output directory.  Parquet files are written to
-        ``{output_dir}/{subject_id}/``.
-
-    Returns
-    -------
-    dict[str, pl.DataFrame]
-        Dict mapping data type to DataFrame ("markers", "forceplates", "events", "sessions").
     """
     from ..adapters.c3d import extract_markers, extract_forceplates, extract_events
     from ..adapters.polars import markers_to_polars, forceplates_to_polars, events_to_polars
@@ -118,10 +82,9 @@ def process_session(
         trial_name = c3d_path.stem
 
         try:
-            # Load with extract_forceplat_data=True so force plate data is available
             c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
 
-            # Extract markers — use long format to handle different marker sets
+            # Extract markers
             marker_data = extract_markers(c3d)
             markers_df = markers_to_polars(marker_data, format="long", trial_name=trial_name)
             markers_df = markers_df.with_columns([
@@ -131,7 +94,7 @@ def process_session(
             markers_df = _ensure_string_types(markers_df)
             all_markers.append(markers_df)
 
-            # Extract force plates — use long format
+            # Extract force plates
             try:
                 fp_data = extract_forceplates(c3d)
                 fp_df = forceplates_to_polars(fp_data, format="long", trial_name=trial_name)
@@ -144,7 +107,7 @@ def process_session(
             except (ValueError, KeyError) as e:
                 logger.debug(f"  {trial_name}: no force plate data: {e}")
 
-            # Extract events (may be empty)
+            # Extract events
             events = extract_events(c3d)
             events_df = events_to_polars(events, trial_name=trial_name)
             events_df = events_df.with_columns([
@@ -155,7 +118,7 @@ def process_session(
             if not events_df.is_empty():
                 all_events.append(events_df)
 
-            # Extract session parameters (PROCESSING group)
+            # Extract session parameters
             session_params = extract_session_params(c3d_path)
             if session_params:
                 session_params["subject_id"] = subject_id
@@ -183,10 +146,8 @@ def process_session(
         result["events"].write_parquet(subject_dir / "events.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['events'])} events")
 
-    # Write sessions.parquet with session parameters
-    # Take the first non-empty set of params (they should be the same across trials)
+    # Write sessions.parquet
     if all_session_params:
-        # Deduplicate by keeping the first occurrence
         seen = set()
         unique_params = []
         for params in all_session_params:
@@ -198,40 +159,34 @@ def process_session(
         sessions_df = pl.DataFrame(unique_params)
         sessions_df = _ensure_string_types(sessions_df)
 
-        # Append to existing sessions.parquet if it exists
         sessions_path = subject_dir / "sessions.parquet"
+
         if sessions_path.exists():
             existing = pl.read_parquet(sessions_path)
-            # Check for consistency with existing data
+
             old_session = existing.filter(
                 (pl.col("subject_id") == subject_id) & (pl.col("session_id") == session)
             )
             if not old_session.is_empty():
-                # Compare columns for consistency
-                for col in write_df.columns:
+                for col in sessions_df.columns:
                     if col in ("subject_id", "session_id"):
                         continue
                     if col in old_session.columns:
                         old_val = old_session[col][0]
-                        new_val = write_df[col][0]
+                        new_val = sessions_df[col][0]
                         if old_val != new_val:
                             logger.warning(
                                 f"Parameter {col} differs for {subject_id}/{session}: "
                                 f"{old_val} vs {new_val}"
                             )
-            # Remove old entry for this session if present
+
             existing = existing.filter(
                 ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
             )
-            # Ensure both have same columns before concat
-            write_df = write_df.cast({col: pl.Utf8 for col in write_df.columns if col not in existing.columns and col in ("subject_id", "session_id")})
-            write_df = write_df.select(existing.columns)
-            sessions_df = pl.concat([existing, write_df])
+            sessions_df = pl.concat([existing, sessions_df])
 
-        # Drop internal _trial_name column before writing
-        write_df = sessions_df.drop("_trial_name") if "_trial_name" in sessions_df.columns else sessions_df
-        write_df.write_parquet(sessions_path)
-        result["sessions"] = write_df
+        sessions_df.write_parquet(sessions_path)
+        result["sessions"] = sessions_df
         logger.info(f"  {subject_id}/{session}: sessions parameters extracted")
 
     return result
