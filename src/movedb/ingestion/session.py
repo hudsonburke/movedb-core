@@ -160,7 +160,6 @@ def process_session(
             if session_params:
                 session_params["subject_id"] = subject_id
                 session_params["session_id"] = session
-                session_params["_trial_name"] = trial_name
                 all_session_params.append(session_params)
 
         except Exception as e:
@@ -211,7 +210,7 @@ def process_session(
                 (pl.col("subject_id") == subject_id) & (pl.col("session_id") == session)
             )
             if not old_session.is_empty():
-                # Compare numeric columns for consistency
+                # Compare columns for consistency
                 for col in write_df.columns:
                     if col in ("subject_id", "session_id"):
                         continue
