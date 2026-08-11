@@ -160,6 +160,7 @@ def process_session(
             if session_params:
                 session_params["subject_id"] = subject_id
                 session_params["session_id"] = session
+                session_params["_trial_name"] = trial_name
                 all_session_params.append(session_params)
 
         except Exception as e:
@@ -209,15 +210,17 @@ def process_session(
             if not old_session.is_empty():
                 # Compare numeric columns for consistency
                 for col in sessions_df.columns:
-                    if col in ("subject_id", "session_id"):
+                    if col in ("subject_id", "session_id", "_trial_name"):
                         continue
                     if col in old_session.columns:
                         old_val = old_session[col][0]
                         new_val = sessions_df[col][0]
                         if old_val != new_val:
+                            old_trial = old_session["_trial_name"][0] if "_trial_name" in old_session.columns else "unknown"
+                            new_trial = sessions_df["_trial_name"][0] if "_trial_name" in sessions_df.columns else "unknown"
                             logger.warning(
                                 f"Parameter {col} differs for {subject_id}/{session}: "
-                                f"{old_val} vs {new_val}"
+                                f"{old_val} ({old_trial}) vs {new_val} ({new_trial})"
                             )
             # Remove old entry for this session if present
             existing = existing.filter(
@@ -225,8 +228,10 @@ def process_session(
             )
             sessions_df = pl.concat([existing, sessions_df])
 
-        sessions_df.write_parquet(sessions_path)
-        result["sessions"] = sessions_df
+        # Drop internal _trial_name column before writing
+        write_df = sessions_df.drop("_trial_name") if "_trial_name" in sessions_df.columns else sessions_df
+        write_df.write_parquet(sessions_path)
+        result["sessions"] = write_df
         logger.info(f"  {subject_id}/{session}: sessions parameters extracted")
 
     return result
