@@ -183,7 +183,7 @@ def process_session(
             existing = existing.filter(
                 ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
             )
-            sessions_df = pl.concat([existing, sessions_df])
+            sessions_df = pl.concat([existing, sessions_df], how="diagonal")
 
         sessions_df.write_parquet(sessions_path)
         result["sessions"] = sessions_df
