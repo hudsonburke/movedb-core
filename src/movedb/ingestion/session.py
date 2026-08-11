@@ -129,6 +129,14 @@ def process_session(
             logger.warning(f"  Failed to process {c3d_path}: {e}")
             continue
 
+    # Extract force plate side mapping from .enf files
+    fp_side_map = {}
+    for c3d_path in c3d_files:
+        c3d_path = Path(c3d_path)
+        enf_path = c3d_path.with_suffix(".Trial.enf")
+        if enf_path.exists():
+            fp_side_map.update(get_fp_side_map(enf_path))
+
     # Write Parquet files
     result = {}
     if all_markers:
@@ -137,7 +145,23 @@ def process_session(
         logger.info(f"  {subject_id}/{session}: {len(result['markers'])} marker rows")
 
     if all_forceplates:
-        result["forceplates"] = pl.concat(all_forceplates, how="diagonal")
+        fp_df = pl.concat(all_forceplates, how="diagonal")
+        # Add side column from .enf mapping
+        if fp_side_map:
+            fp_names = fp_df["fp_name"].unique().to_list()
+            # Map fp_name (e.g., "Bertec_Force_Plate_2") to side via .enf key (e.g., "FP2")
+            side_map = {}
+            for fp_name in fp_names:
+                # Extract plate number from name
+                for key, side in fp_side_map.items():
+                    if key.upper().replace("FP", "") in fp_name:
+                        side_map[fp_name] = side
+                        break
+            if side_map:
+                fp_df = fp_df.with_columns(
+                    pl.Series("side", [side_map.get(n, "unknown") for n in fp_df["fp_name"]])
+                )
+        result["forceplates"] = fp_df
         result["forceplates"].write_parquet(subject_dir / "forceplates.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['forceplates'])} forceplate rows")
 
