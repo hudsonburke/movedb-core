@@ -198,9 +198,6 @@ def process_session(
         sessions_df = pl.DataFrame(unique_params)
         sessions_df = _ensure_string_types(sessions_df)
 
-        # Drop internal _trial_name column before writing
-        write_df = sessions_df.drop("_trial_name") if "_trial_name" in sessions_df.columns else sessions_df
-
         # Append to existing sessions.parquet if it exists
         sessions_path = subject_dir / "sessions.parquet"
         if sessions_path.exists():
