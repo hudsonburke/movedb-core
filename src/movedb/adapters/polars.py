@@ -278,7 +278,7 @@ def forceplates_to_polars(
                 df_dict["trial_name"] = [trial_name] * (n_frames * n_vars)
             plate_dfs.append(pl.DataFrame(df_dict))
 
-        return pl.concat(plate_dfs)
+        return pl.concat(plate_dfs, how="diagonal")
 
     else:
         raise ValueError(f"Unknown format: {format}. Use 'long' or 'wide'.")

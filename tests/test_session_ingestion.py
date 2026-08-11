@@ -350,3 +350,52 @@ class TestRequiredMarkers:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestForceplatesConcat:
+    """Test forceplate DataFrame concatenation with different column counts."""
+
+    def test_different_forceplate_widths(self):
+        """Test concat of forceplate DataFrames with different numbers of variables."""
+        # Simulate force plate data with different numbers of channels
+        df_plate1 = pl.DataFrame({
+            "frame": [0, 1, 2],
+            "time": [0.0, 0.005, 0.01],
+            "fp1_value": [1.0, 2.0, 3.0],
+            "fp1_force_x": [0.1, 0.2, 0.3],
+            "fp1_force_y": [0.4, 0.5, 0.6],
+            "fp1_force_z": [0.7, 0.8, 0.9],
+            "trial_name": ["Walk01"] * 3,
+        })
+
+        df_plate2 = pl.DataFrame({
+            "frame": [0, 1, 2],
+            "time": [0.0, 0.005, 0.01],
+            "fp2_moment_x": [1.0, 2.0, 3.0],
+            "fp2_moment_y": [4.0, 5.0, 6.0],
+            "trial_name": ["Walk02"] * 3,
+        })
+
+        # This should work with how="diagonal"
+        result = pl.concat([df_plate1, df_plate2], how="diagonal")
+        assert result.shape[0] == 6
+
+    def test_forceplate_width_mismatch_error(self):
+        """Test that width mismatch is caught without how='diagonal'."""
+        df_wide = pl.DataFrame({
+            "frame": [0, 1],
+            **{f"col_{i}": [1.0, 2.0] for i in range(82)},
+        })
+
+        df_narrow = pl.DataFrame({
+            "frame": [0, 1],
+            **{f"col_{i}": [1.0, 2.0] for i in range(10)},
+        })
+
+        # Without how="diagonal", this should fail
+        with pytest.raises(Exception):
+            pl.concat([df_wide, df_narrow])
+
+        # With how="diagonal", this should work
+        result = pl.concat([df_wide, df_narrow], how="diagonal")
+        assert result.shape[0] == 4
