@@ -170,17 +170,17 @@ def process_session(
     # Write Parquet files
     result = {}
     if all_markers:
-        result["markers"] = pl.concat(all_markers)
+        result["markers"] = pl.concat(all_markers, how="diagonal")
         result["markers"].write_parquet(subject_dir / "markers.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['markers'])} marker rows")
 
     if all_forceplates:
-        result["forceplates"] = pl.concat(all_forceplates)
+        result["forceplates"] = pl.concat(all_forceplates, how="diagonal")
         result["forceplates"].write_parquet(subject_dir / "forceplates.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['forceplates'])} forceplate rows")
 
     if all_events:
-        result["events"] = pl.concat(all_events)
+        result["events"] = pl.concat(all_events, how="diagonal")
         result["events"].write_parquet(subject_dir / "events.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['events'])} events")
 
@@ -199,6 +199,9 @@ def process_session(
         sessions_df = pl.DataFrame(unique_params)
         sessions_df = _ensure_string_types(sessions_df)
 
+        # Drop internal _trial_name column before writing
+        write_df = sessions_df.drop("_trial_name") if "_trial_name" in sessions_df.columns else sessions_df
+
         # Append to existing sessions.parquet if it exists
         sessions_path = subject_dir / "sessions.parquet"
         if sessions_path.exists():
@@ -209,24 +212,25 @@ def process_session(
             )
             if not old_session.is_empty():
                 # Compare numeric columns for consistency
-                for col in sessions_df.columns:
-                    if col in ("subject_id", "session_id", "_trial_name"):
+                for col in write_df.columns:
+                    if col in ("subject_id", "session_id"):
                         continue
                     if col in old_session.columns:
                         old_val = old_session[col][0]
-                        new_val = sessions_df[col][0]
+                        new_val = write_df[col][0]
                         if old_val != new_val:
-                            old_trial = old_session["_trial_name"][0] if "_trial_name" in old_session.columns else "unknown"
-                            new_trial = sessions_df["_trial_name"][0] if "_trial_name" in sessions_df.columns else "unknown"
                             logger.warning(
                                 f"Parameter {col} differs for {subject_id}/{session}: "
-                                f"{old_val} ({old_trial}) vs {new_val} ({new_trial})"
+                                f"{old_val} vs {new_val}"
                             )
             # Remove old entry for this session if present
             existing = existing.filter(
                 ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
             )
-            sessions_df = pl.concat([existing, sessions_df])
+            # Ensure both have same columns before concat
+            write_df = write_df.cast({col: pl.Utf8 for col in write_df.columns if col not in existing.columns and col in ("subject_id", "session_id")})
+            write_df = write_df.select(existing.columns)
+            sessions_df = pl.concat([existing, write_df])
 
         # Drop internal _trial_name column before writing
         write_df = sessions_df.drop("_trial_name") if "_trial_name" in sessions_df.columns else sessions_df
