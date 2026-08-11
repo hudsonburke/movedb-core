@@ -16,18 +16,8 @@ dependencies = [
   "polars>=1.0",
   "duckdb>=1.0.0",
   "click>=8.0",
+  "pytest>=9.1.1",
 ]
-
-[project.optional-dependencies]
-c3d = ["rerun-importer-c3d>=0.1.0"]
-b3d = ["rerun-importer-b3d[b3d]>=0.1.0"]
-rerun = ["rerun-sdk>=0.34.0"]
-all = [
-  "movedb-core[c3d]",
-  "movedb-core[b3d]",
-  "movedb-core[rerun]",
-]
-
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/movedb"]
