@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 # Columns that should always be String type (some C3D files have numeric names)
 STRING_COLUMNS = ["marker_name", "trial_name", "subject_id", "session_id", "context", "label"]
 
+# PROCESSING parameters to extract from C3D files
+# These are subject/session-specific anthropometric measurements
+PROCESSING_PARAMS = [
+    "Mass",
+    "RFemurLength",
+    "RTibiaLength",
+    "LFemurLength",
+    "LTibiaLength",
+    "RFootLength",
+    "LFootLength",
+]
+
 
 def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     """Cast known string columns to Utf8 type to prevent type mismatches."""
@@ -27,6 +39,38 @@ def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     if casts:
         df = df.with_columns(casts)
     return df
+
+
+def extract_session_params(c3d_path: Path) -> dict[str, float]:
+    """Extract PROCESSING parameters from a C3D file.
+
+    Parameters
+    ----------
+    c3d_path : Path
+        Path to the C3D file.
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary of parameter names to values. Missing parameters
+        are omitted (not set to None/NaN).
+    """
+    import ezc3d
+
+    c3d = ezc3d.c3d(str(c3d_path))
+
+    params = {}
+    if "PROCESSING" not in c3d.parameters:
+        return params
+
+    for param_name in PROCESSING_PARAMS:
+        if param_name in c3d.parameters["PROCESSING"]:
+            value = c3d.parameters["PROCESSING"][param_name]["value"]
+            if value and len(value) > 0:
+                # Value is typically a list with one element
+                params[param_name] = float(value[0])
+
+    return params
 
 
 def process_session(
@@ -43,6 +87,9 @@ def process_session(
     Uses "long" format for markers and force plates to handle different
     marker/force plate sets across trials within the same subject.
 
+    Also extracts PROCESSING parameters (mass, bone lengths) from C3D files
+    and writes them to sessions.parquet for use in model scaling.
+
     Parameters
     ----------
     subject_id : str
@@ -58,7 +105,7 @@ def process_session(
     Returns
     -------
     dict[str, pl.DataFrame]
-        Dict mapping data type to DataFrame ("markers", "forceplates", "events").
+        Dict mapping data type to DataFrame ("markers", "forceplates", "events", "sessions").
     """
     from ..adapters.c3d import extract_markers, extract_forceplates, extract_events
     from ..adapters.polars import markers_to_polars, forceplates_to_polars, events_to_polars
@@ -71,6 +118,7 @@ def process_session(
     all_markers = []
     all_forceplates = []
     all_events = []
+    all_session_params = []
 
     for c3d_path in c3d_files:
         c3d_path = Path(c3d_path)
@@ -114,6 +162,13 @@ def process_session(
             if not events_df.is_empty():
                 all_events.append(events_df)
 
+            # Extract session parameters (PROCESSING group)
+            session_params = extract_session_params(c3d_path)
+            if session_params:
+                session_params["subject_id"] = subject_id
+                session_params["session_id"] = session
+                all_session_params.append(session_params)
+
         except Exception as e:
             logger.warning(f"  Failed to process {c3d_path}: {e}")
             continue
@@ -134,5 +189,34 @@ def process_session(
         result["events"] = pl.concat(all_events)
         result["events"].write_parquet(subject_dir / "events.parquet")
         logger.info(f"  {subject_id}/{session}: {len(result['events'])} events")
+
+    # Write sessions.parquet with session parameters
+    # Take the first non-empty set of params (they should be the same across trials)
+    if all_session_params:
+        # Deduplicate by keeping the first occurrence
+        seen = set()
+        unique_params = []
+        for params in all_session_params:
+            key = (params.get("subject_id"), params.get("session_id"))
+            if key not in seen:
+                seen.add(key)
+                unique_params.append(params)
+
+        sessions_df = pl.DataFrame(unique_params)
+        sessions_df = _ensure_string_types(sessions_df)
+
+        # Append to existing sessions.parquet if it exists
+        sessions_path = subject_dir / "sessions.parquet"
+        if sessions_path.exists():
+            existing = pl.read_parquet(sessions_path)
+            # Remove old entry for this session if present
+            existing = existing.filter(
+                ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
+            )
+            sessions_df = pl.concat([existing, sessions_df])
+
+        sessions_df.write_parquet(sessions_path)
+        result["sessions"] = sessions_df
+        logger.info(f"  {subject_id}/{session}: sessions parameters extracted")
 
     return result
