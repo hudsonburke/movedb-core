@@ -17,19 +17,6 @@ logger = logging.getLogger(__name__)
 # Columns that should always be String type (some C3D files have numeric names)
 STRING_COLUMNS = ["marker_name", "trial_name", "subject_id", "session_id", "context", "label"]
 
-# PROCESSING parameters to extract from C3D files
-# These are subject/session-specific anthropometric measurements
-PROCESSING_PARAMS = [
-    "Mass",
-    "RFemurLength",
-    "RTibiaLength",
-    "LFemurLength",
-    "LTibiaLength",
-    "RFootLength",
-    "LFootLength",
-]
-
-
 def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     """Cast known string columns to Utf8 type to prevent type mismatches."""
     casts = []
@@ -41,8 +28,8 @@ def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def extract_session_params(c3d_path: Path) -> dict[str, float]:
-    """Extract PROCESSING parameters from a C3D file.
+def extract_session_params(c3d_path: Path) -> dict[str, float | str]:
+    """Extract all PROCESSING parameters from a C3D file.
 
     Parameters
     ----------
@@ -51,9 +38,10 @@ def extract_session_params(c3d_path: Path) -> dict[str, float]:
 
     Returns
     -------
-    dict[str, float]
+    dict[str, float | str]
         Dictionary of parameter names to values. Missing parameters
-        are omitted (not set to None/NaN).
+        are omitted (not set to None/NaN). Non-numeric values are
+        stored as strings.
     """
     import ezc3d
 
@@ -63,12 +51,17 @@ def extract_session_params(c3d_path: Path) -> dict[str, float]:
     if "PROCESSING" not in c3d.parameters:
         return params
 
-    for param_name in PROCESSING_PARAMS:
-        if param_name in c3d.parameters["PROCESSING"]:
-            value = c3d.parameters["PROCESSING"][param_name]["value"]
-            if value and len(value) > 0:
-                # Value is typically a list with one element
-                params[param_name] = float(value[0])
+    for param_name, param_info in c3d.parameters["PROCESSING"].items():
+        value = param_info.get("value")
+        if value and len(value) > 0:
+            val = value[0]
+            if val is None:
+                continue
+            # Try numeric conversion, fall back to string
+            try:
+                params[param_name] = float(val)
+            except (ValueError, TypeError):
+                params[param_name] = str(val)
 
     return params
 
@@ -209,6 +202,23 @@ def process_session(
         sessions_path = subject_dir / "sessions.parquet"
         if sessions_path.exists():
             existing = pl.read_parquet(sessions_path)
+            # Check for consistency with existing data
+            old_session = existing.filter(
+                (pl.col("subject_id") == subject_id) & (pl.col("session_id") == session)
+            )
+            if not old_session.is_empty():
+                # Compare numeric columns for consistency
+                for col in sessions_df.columns:
+                    if col in ("subject_id", "session_id"):
+                        continue
+                    if col in old_session.columns:
+                        old_val = old_session[col][0]
+                        new_val = sessions_df[col][0]
+                        if old_val != new_val:
+                            logger.warning(
+                                f"Parameter {col} differs for {subject_id}/{session}: "
+                                f"{old_val} vs {new_val}"
+                            )
             # Remove old entry for this session if present
             existing = existing.filter(
                 ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
