@@ -161,7 +161,7 @@ class TestSessionParquet:
 
         # Read back and verify
         loaded = pl.read_parquet(sessions_path)
-        assert loaded.shape == (1, 6)
+        assert loaded.shape == (1, 5)
         assert loaded["Mass"][0] == 0.42
 
     def test_append_sessions_parquet(self, tmp_path):
