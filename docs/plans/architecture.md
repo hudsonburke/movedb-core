@@ -58,28 +58,75 @@ def process_session(
     # Write to {output_dir}/{subject_id}/*.parquet
 ```
 
+### storage/schemas.py
+**Input:** Data validation
+**Output:** Patito model definitions
+
+```python
+import patito as pt
+
+class Markers(pt.Model):
+    frame: int
+    time: float
+    marker_name: str
+    x: float
+    y: float
+    z: float
+    trial_name: str
+    subject_id: str
+    session_id: str
+
+class Forceplates(pt.Model):
+    frame: int
+    time: float
+    fp_name: str
+    variable: str
+    axis: str
+    value: float
+    side: str | None = None
+    trial_name: str
+    subject_id: str
+    session_id: str
+
+class Events(pt.Model):
+    context: str
+    label: str
+    time: float
+    trial_name: str
+    subject_id: str
+    session_id: str
+
+class Sessions(pt.Model):
+    subject_id: str
+    session_id: str
+    Mass: float | None = None
+    RFemurLength: float | None = None
+    RTibiaLength: float | None = None
+    # ... other parameters
+```
+
 ### storage/parquet.py
 **Input:** Parquet files on disk
 **Output:** Typed DataFrames
 
 ```python
 class ParquetStore:
-    """Read/write Parquet with consistent schema."""
+    """Read/write Parquet with schema validation."""
     
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
     
-    def get_markers(self, subject_id: str, session: str = None) -> pl.DataFrame:
-        """Load markers for a subject/session."""
+    def get_markers(self, subject_id: str, session: str = None) -> Markers:
+        """Load markers with schema validation."""
     
-    def get_forceplates(self, subject_id: str, session: str = None) -> pl.DataFrame:
-        """Load force plates for a subject/session."""
+    def get_forceplates(self, subject_id: str, session: str = None) -> Forceplates:
+        """Load force plates with schema validation."""
     
-    def get_events(self, subject_id: str, session: str = None) -> pl.DataFrame:
-        """Load events for a subject/session."""
+    def get_events(self, subject_id: str, session: str = None) -> Events:
+        """Load events with schema validation."""
     
-    def get_sessions(self, subject_id: str = None) -> pl.DataFrame:
-        """Load session parameters."""
+    def get_sessions(self, subject_id: str = None) -> Sessions:
+        """Load session parameters with schema validation."""
     
     def subjects(self) -> list[str]:
         """List available subjects."""
@@ -168,47 +215,11 @@ df = db.query("""
 
 ## Parquet Schema
 
-### markers.parquet
-| Column | Type | Description |
-|--------|------|-------------|
-| frame | i64 | Frame number |
-| time | f64 | Time in seconds |
-| marker_name | str | Marker name |
-| x, y, z | f64 | Position (mm) |
-| trial_name | str | Trial name |
-| subject_id | str | Subject ID |
-| session_id | str | Session ID |
+### Parquet Schemas (defined in storage/schemas.py)
 
-### forceplates.parquet
-| Column | Type | Description |
-|--------|------|-------------|
-| frame | i64 | Frame number |
-| time | f64 | Time in seconds |
-| fp_name | str | Force plate name |
-| variable | str | force, moment, cop, free_moment |
-| axis | str | x, y, z |
-| value | f64 | Value |
-| side | str | Left, Right, unknown |
-| trial_name | str | Trial name |
-| subject_id | str | Subject ID |
-| session_id | str | Session ID |
+All schemas use patito Models for type validation:
 
-### events.parquet
-| Column | Type | Description |
-|--------|------|-------------|
-| context | str | Left, Right |
-| label | str | Foot Strike, Foot Off |
-| time | f64 | Time in seconds |
-| trial_name | str | Trial name |
-| subject_id | str | Subject ID |
-| session_id | str | Session ID |
-
-### sessions.parquet
-| Column | Type | Description |
-|--------|------|-------------|
-| subject_id | str | Subject ID |
-| session_id | str | Session ID |
-| Mass | f64 | Mass (kg) |
-| RFemurLength | f64 | Right femur length (mm) |
-| RTibiaLength | f64 | Right tibia length (mm) |
-| ... | ... | ... |
+- **Markers**: frame, time, marker_name, x, y, z, trial_name, subject_id, session_id
+- **Forceplates**: frame, time, fp_name, variable, axis, value, side (optional), trial_name, subject_id, session_id
+- **Events**: context, label, time, trial_name, subject_id, session_id
+- **Sessions**: subject_id, session_id, Mass, RFemurLength, RTibiaLength, ... (optional parameters)
