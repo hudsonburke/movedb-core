@@ -83,21 +83,20 @@ class TestSessions:
         df = pl.DataFrame({
             "subject_id": ["BAA01"],
             "session_id": ["baseline"],
-            "Mass": [0.45],
-            "RFemurLength": [32.0],
-            "RTibiaLength": [39.0],
         })
         sessions = Sessions.from_polars(df)
         assert sessions is not None
 
-    def test_optional_fields(self):
-        """Test that optional fields can be None."""
+    def test_extend_schema(self):
+        """Test extending Sessions with .with_fields()."""
+        RatSessions = Sessions.with_fields(Mass=float, RFemurLength=float)
         df = pl.DataFrame({
             "subject_id": ["BAA01"],
             "session_id": ["baseline"],
             "Mass": [0.45],
+            "RFemurLength": [32.0],
         })
-        sessions = Sessions.from_polars(df)
+        sessions = RatSessions.from_polars(df)
         assert sessions is not None
 
 

@@ -55,17 +55,10 @@ class Events(pt.Model):
 
 
 class Sessions(pt.Model):
-    """Per-session anthropometric parameters.
+    """Per-session metadata.
 
-    Extracted from C3D PROCESSING group during conversion.
+    Applications extend with .with_fields() for use-case specific parameters:
+        RatSessions = Sessions.with_fields(Mass=float, RFemurLength=float, ...)
     """
     subject_id: str
     session_id: str
-    Mass: float | None = None
-    RFemurLength: float | None = None
-    RTibiaLength: float | None = None
-    RFootLength: float | None = None
-    LFemurLength: float | None = None
-    LTibiaLength: float | None = None
-    LFootLength: float | None = None
-    Length: float | None = None
