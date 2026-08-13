@@ -63,7 +63,7 @@ class TestForceplates:
                 "session_id": ["baseline"] * 2,
             }
         )
-        fps = Forceplates.from_polars(df)
+        fps = Forceplates.validate(df)
         assert fps is not None
 
 
@@ -80,7 +80,7 @@ class TestEvents:
                 "session_id": ["baseline"] * 2,
             }
         )
-        events = Events.from_polars(df)
+        events = Events.validate(df)
         assert events is not None
 
 
@@ -93,7 +93,7 @@ class TestSessions:
                 "session_id": ["baseline"],
             }
         )
-        sessions = Sessions.from_polars(df)
+        sessions = Sessions.validate(df)
         assert sessions is not None
 
     def test_extend_schema(self):
@@ -107,7 +107,7 @@ class TestSessions:
                 "RFemurLength": [32.0],
             }
         )
-        sessions = RatSessions.from_polars(df)
+        sessions = RatSessions.validate(df)
         assert sessions is not None
 
 
@@ -130,5 +130,5 @@ class TestWithFields:
                 "side": ["Left", "Left"],
             }
         )
-        fps = ForceplatesWithSide.from_polars(df)
+        fps = ForceplatesWithSide.validate(df)
         assert fps is not None
