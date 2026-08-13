@@ -141,7 +141,11 @@ def process_session(
     result = {}
     if all_markers:
         result["markers"] = pl.concat(all_markers, how="diagonal")
-        result["markers"].write_parquet(subject_dir / "markers.parquet")
+        markers_path = subject_dir / "markers.parquet"
+        if markers_path.exists():
+            existing = pl.read_parquet(markers_path)
+            result["markers"] = pl.concat([existing, result["markers"]], how="diagonal")
+        result["markers"].write_parquet(markers_path)
         logger.info(f"  {subject_id}/{session}: {len(result['markers'])} marker rows")
 
     if all_forceplates:
@@ -162,12 +166,20 @@ def process_session(
                     pl.Series("side", [side_map.get(n, "unknown") for n in fp_df["fp_name"]])
                 )
         result["forceplates"] = fp_df
-        result["forceplates"].write_parquet(subject_dir / "forceplates.parquet")
+        fp_path = subject_dir / "forceplates.parquet"
+        if fp_path.exists():
+            existing = pl.read_parquet(fp_path)
+            result["forceplates"] = pl.concat([existing, result["forceplates"]], how="diagonal")
+        result["forceplates"].write_parquet(fp_path)
         logger.info(f"  {subject_id}/{session}: {len(result['forceplates'])} forceplate rows")
 
     if all_events:
         result["events"] = pl.concat(all_events, how="diagonal")
-        result["events"].write_parquet(subject_dir / "events.parquet")
+        events_path = subject_dir / "events.parquet"
+        if events_path.exists():
+            existing = pl.read_parquet(events_path)
+            result["events"] = pl.concat([existing, result["events"]], how="diagonal")
+        result["events"].write_parquet(events_path)
         logger.info(f"  {subject_id}/{session}: {len(result['events'])} events")
 
     # Write sessions.parquet
