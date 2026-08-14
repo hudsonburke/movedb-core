@@ -13,7 +13,13 @@ import ezc3d
 import numpy as np
 import polars as pl
 
-from movedb.schemas.models import EventsData, ForceplatesData, MarkersData
+from movedb.schemas.models import (
+    AnalogsData,
+    EventsData,
+    ForceplateGeometryData,
+    ForceplatesData,
+    PointsData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,19 +60,15 @@ def get_param(c3d: ezc3d.c3d, keys: list[str], index: int = 0, default=None):
     return value if value is not None else default
 
 
-def read_parameters(c3d_path: str | Path) -> dict:
-    """Extract PROCESSING parameters from a C3D file.
+def _extract_params_group(c3d: ezc3d.c3d, group: str) -> dict:
+    """Extract all parameters from a C3D parameter group.
 
     Returns dict of parameter name -> value (float or str).
-    Each C3D file contains trial-level parameters (e.g. Mass, bone lengths)
-    that are typically consistent across trials in a session.
     """
-    c3d = ezc3d.c3d(str(c3d_path))
-
     params = {}
-    processing = c3d.get("parameters", {}).get("PROCESSING", {})
+    group_data = c3d.get("parameters", {}).get(group, {})
 
-    for param_name, param_info in processing.items():
+    for param_name, param_info in group_data.items():
         if param_name == "USED":
             continue
         value = param_info.get("value")
@@ -86,13 +88,32 @@ def read_parameters(c3d_path: str | Path) -> dict:
     return params
 
 
-def read_markers(
+def read_parameters(c3d_path: str | Path) -> dict:
+    """Extract parameters from a C3D file.
+
+    Combines PROCESSING, TRIAL, and ANALOG group parameters into a single
+    dict. Each C3D file contains trial-level parameters that are typically
+    consistent across trials in a session but can differ.
+    """
+    c3d = ezc3d.c3d(str(c3d_path))
+
+    params = {}
+    for group in ("PROCESSING", "TRIAL", "ANALOG"):
+        params.update(_extract_params_group(c3d, group))
+
+    return params
+
+
+def read_points(
     c3d_path: str | Path, trial_name: str
 ) -> pl.DataFrame:
-    """Read markers from C3D file and return DataFrame.
+    """Read 3D point positions from C3D file.
 
     Returns long-format DataFrame with columns:
-    frame, time, marker_name, x, y, z, trial_name
+    frame, time, marker_name, x, y, z, residual, camera_mask, trial_name
+
+    Includes tracking residuals and camera visibility masks for
+    data quality filtering.
     """
     c3d = ezc3d.c3d(str(c3d_path))
 
@@ -105,18 +126,31 @@ def read_markers(
     labels = get_param_strings(c3d, ["POINT", "LABELS"])
     n_markers = len(labels)
 
-    # Extract marker positions (3, n_markers, n_frames)
+    # Extract marker positions (4, n_markers, n_frames) — 4th row is residual
     data = c3d["data"]["points"]
 
-    # Create arrays for each column — derive times from frames to avoid duplicate arange
+    # Extract residuals (1, n_markers, n_frames)
+    residuals = c3d["data"]["meta_points"]["residuals"]
+
+    # Extract camera masks (n_cameras, n_markers, n_frames)
+    camera_masks = c3d["data"]["meta_points"]["camera_masks"]
+
+    # Create arrays for each column
     frames = np.repeat(np.arange(n_frames), n_markers)
     times = frames / point_rate
     marker_names = np.tile(labels, n_frames)
     x = data[0, :, :].T.flatten()
     y = data[1, :, :].T.flatten()
     z = data[2, :, :].T.flatten()
+    residual = residuals[0, :, :].T.flatten()
 
-    return MarkersData.DataFrame(
+    # Camera masks: convert to list of ints per row
+    # camera_masks shape: (n_cameras, n_markers, n_frames)
+    # Transpose to (n_frames, n_markers, n_cameras), then flatten
+    mask_data = camera_masks.transpose(2, 1, 0).reshape(-1, camera_masks.shape[0])
+    camera_mask = [mask.astype(int).tolist() for mask in mask_data]
+
+    return PointsData.DataFrame(
         {
             "frame": frames.astype(int),
             "time": times,
@@ -124,15 +158,21 @@ def read_markers(
             "x": x.astype(float),
             "y": y.astype(float),
             "z": z.astype(float),
+            "residual": residual.astype(float),
+            "camera_mask": camera_mask,
             "trial_name": trial_name,
         }
     )
 
 
+# Keep backward compatibility
+read_markers = read_points
+
+
 def read_forceplates(
     c3d_path: str | Path, trial_name: str
 ) -> pl.DataFrame:
-    """Read force plate data from C3D file and return DataFrame.
+    """Read force plate data from C3D file.
 
     Returns long-format DataFrame with columns:
     frame, time, fp_name, variable, axis, value, trial_name
@@ -196,10 +236,146 @@ def read_forceplates(
     )
 
 
+def read_forceplate_geometry(
+    c3d_path: str | Path, trial_name: str
+) -> pl.DataFrame:
+    """Read force plate calibration and positioning from C3D file.
+
+    Returns DataFrame with columns:
+    fp_name, origin, corners, cal_matrix, trial_name
+
+    Origin is a list of 3 floats (x, y, z).
+    Corners is a flattened 3x4 array (12 floats) — 4 corner points.
+    Cal_matrix is a flattened 6x6 array (36 floats), or empty if not stored.
+    """
+    c3d = ezc3d.c3d(str(c3d_path))
+
+    try:
+        fp_used = get_param(c3d, ["FORCE_PLATFORM", "USED"], default=0)
+        n_plates = int(fp_used) if fp_used is not None else 0
+    except (ValueError, TypeError):
+        n_plates = 0
+
+    if n_plates == 0:
+        return pl.DataFrame()
+
+    corners_raw = get_param_list(c3d, ["FORCE_PLATFORM", "CORNERS"], default=[])
+    origin_raw = get_param_list(c3d, ["FORCE_PLATFORM", "ORIGIN"], default=[])
+    cal_raw = get_param_list(c3d, ["FORCE_PLATFORM", "CAL_MATRIX"], default=[])
+
+    fp_names = []
+    origins = []
+    corners_list = []
+    cal_matrices = []
+
+    for fp_idx in range(n_plates):
+        fp_name = f"FP{fp_idx + 1}"
+
+        # Origin: (3, n_plates) — slice column fp_idx
+        if isinstance(origin_raw, np.ndarray) and origin_raw.size > 0:
+            if origin_raw.ndim == 2:
+                origin = origin_raw[:, fp_idx].tolist()
+            else:
+                origin = origin_raw.tolist()
+        else:
+            origin = [0.0, 0.0, 0.0]
+
+        # Corners: (3, 4, n_plates) — slice plate dimension, then flatten
+        if isinstance(corners_raw, np.ndarray) and corners_raw.size > 0:
+            if corners_raw.ndim == 3:
+                # Shape is (3, 4, n_plates) — take all3 coords, 4 corners for this plate
+                plate_corners = corners_raw[:, :, fp_idx]  # (3, 4)
+                flat_corners = plate_corners.ravel().tolist()
+            elif corners_raw.ndim == 2:
+                # Shape is (3, 4*n_plates) — old format
+                start = fp_idx * 4
+                plate_corners = corners_raw[:, start:start + 4]  # (3, 4)
+                flat_corners = plate_corners.ravel().tolist()
+            else:
+                flat_corners = corners_raw.ravel().tolist()[:12]
+        else:
+            flat_corners = [0.0] * 12
+
+        # Cal matrix: (6, 6*n_plates) or empty — may not be stored in C3D
+        if isinstance(cal_raw, np.ndarray) and cal_raw.size > 0:
+            if cal_raw.ndim == 2:
+                start = fp_idx * 6
+                plate_cal = cal_raw[:, start:start + 6]  # (6, 6)
+                flat_cal = plate_cal.ravel().tolist()
+            else:
+                flat_cal = cal_raw.ravel().tolist()[:36]
+        else:
+            flat_cal = [0.0] * 36  # use zeros instead of empty list to avoid List(Null)
+
+        fp_names.append(fp_name)
+        origins.append(origin)
+        corners_list.append(flat_corners)
+        cal_matrices.append(flat_cal)
+
+    return ForceplateGeometryData.DataFrame(
+        {
+            "fp_name": fp_names,
+            "origin": origins,
+            "corners": corners_list,
+            "cal_matrix": cal_matrices,
+            "trial_name": [trial_name] * n_plates,
+        }
+    )
+
+
+def read_analogs(
+    c3d_path: str | Path, trial_name: str
+) -> pl.DataFrame:
+    """Read raw analog channel data from C3D file.
+
+    Returns long-format DataFrame with columns:
+    frame, time, channel_name, value, unit, trial_name
+    """
+    c3d = ezc3d.c3d(str(c3d_path))
+
+    analog_rate = get_param(c3d, ["ANALOG", "RATE"], default=1000.0)
+    n_analog_frames = c3d["header"]["analogs"]["last_frame"] - c3d["header"]["analogs"]["first_frame"] + 1
+
+    # Get channel labels and units
+    labels = get_param_strings(c3d, ["ANALOG", "LABELS"])
+    units = get_param_strings(c3d, ["ANALOG", "UNITS"], default=[])
+
+    n_channels = len(labels)
+
+    if n_channels == 0 or n_analog_frames == 0:
+        return pl.DataFrame()
+
+    # Get raw analog data — shape (1, n_channels, n_frames)
+    data = c3d["data"]["analogs"]
+    if data.size == 0:
+        return pl.DataFrame()
+
+    # Build long-format arrays
+    frames = np.repeat(np.arange(n_analog_frames), n_channels)
+    times = frames / analog_rate
+    channel_names = np.tile(labels, n_analog_frames)
+    values = data[0, :, :].T.flatten()
+
+    # Pad units to match channel count
+    units_padded = units[:n_channels] + [""] * (n_channels - len(units))
+    units_tiled = np.tile(units_padded, n_analog_frames)
+
+    return AnalogsData.DataFrame(
+        {
+            "frame": frames.astype(int),
+            "time": times,
+            "channel_name": channel_names,
+            "value": values.astype(float),
+            "unit": units_tiled,
+            "trial_name": [trial_name] * len(frames),
+        }
+    )
+
+
 def read_events(
     c3d_path: str | Path, trial_name: str
 ) -> pl.DataFrame:
-    """Read gait events from C3D file and return DataFrame.
+    """Read gait events from C3D file.
 
     Returns DataFrame with columns:
     context, label, time, trial_name
@@ -226,6 +402,6 @@ def read_events(
             "context": contexts,
             "label": labels,
             "time": times_sec.tolist(),
-            "trial_name": trial_name,
+            "trial_name": [trial_name] * n_events,
         }
     )
