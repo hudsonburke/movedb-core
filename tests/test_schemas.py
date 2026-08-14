@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from movedb.schemas import Markers, Forceplates, Events, Sessions
+from movedb.schemas import TrialMetadata, Markers, Forceplates, Events, Parameters
 
 
 class TestMarkers:
@@ -81,29 +81,60 @@ class TestEvents:
         Events.validate(df)
 
 
-class TestSessions:
+class TestTrialMetadata:
     def test_valid_schema(self):
-        """Test that Sessions schema validates correct data."""
+        """Test that TrialMetadata schema validates correct data."""
         df = pl.DataFrame(
             {
+                "trial_name": ["Walk01"],
                 "subject_id": ["BAA01"],
                 "session_id": ["baseline"],
             }
         )
-        Sessions.validate(df)
+        TrialMetadata.validate(df)
 
-    def test_extend_schema(self):
-        """Test extending Sessions with .with_fields()."""
-        RatSessions = Sessions.with_fields(Mass=(float, ...), RFemurLength=(float, ...))
+    def test_inherited_by_markers(self):
+        """Test that Markers inherits from TrialMetadata."""
+        assert issubclass(Markers, TrialMetadata)
+
+    def test_inherited_by_forceplates(self):
+        """Test that Forceplates inherits from TrialMetadata."""
+        assert issubclass(Forceplates, TrialMetadata)
+
+    def test_inherited_by_events(self):
+        """Test that Events inherits from TrialMetadata."""
+        assert issubclass(Events, TrialMetadata)
+
+    def test_inherited_by_parameters(self):
+        """Test that Parameters inherits from TrialMetadata."""
+        assert issubclass(Parameters, TrialMetadata)
+
+
+class TestParameters:
+    def test_valid_schema(self):
+        """Test that Parameters schema validates correct data."""
         df = pl.DataFrame(
             {
+                "trial_name": ["Walk01"],
+                "subject_id": ["BAA01"],
+                "session_id": ["baseline"],
+            }
+        )
+        Parameters.validate(df)
+
+    def test_extend_schema(self):
+        """Test extending Parameters with .with_fields()."""
+        RatParameters = Parameters.with_fields(Mass=(float, ...), RFemurLength=(float, ...))
+        df = pl.DataFrame(
+            {
+                "trial_name": ["Walk01"],
                 "subject_id": ["BAA01"],
                 "session_id": ["baseline"],
                 "Mass": [0.45],
                 "RFemurLength": [32.0],
             }
         )
-        RatSessions.validate(df)
+        RatParameters.validate(df)
 
 
 class TestWithFields:

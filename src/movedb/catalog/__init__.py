@@ -12,7 +12,7 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
-from ..schemas import Markers, Forceplates, Events, Sessions
+from ..schemas import Markers, Forceplates, Events, Parameters
 
 logger = logging.getLogger(__name__)
 
@@ -97,22 +97,22 @@ class MoveDB:
         Events.validate(df)
         return df
 
-    def get_sessions(self, subject_id: str | None = None) -> pl.DataFrame:
-        """Load session parameters with schema validation."""
+    def get_parameters(self, subject_id: str | None = None) -> pl.DataFrame:
+        """Load trial parameters with schema validation."""
         if subject_id:
-            path = self.data_dir / subject_id / "sessions.parquet"
+            path = self.data_dir / subject_id / "parameters.parquet"
             df = pl.read_parquet(path)
         else:
             # Load all subjects
             dfs = []
             for subject_dir in sorted(self.data_dir.iterdir()):
                 if subject_dir.is_dir():
-                    sessions_path = subject_dir / "sessions.parquet"
-                    if sessions_path.exists():
-                        dfs.append(pl.read_parquet(sessions_path))
+                    params_path = subject_dir / "parameters.parquet"
+                    if params_path.exists():
+                        dfs.append(pl.read_parquet(params_path))
             df = pl.concat(dfs, how="diagonal") if dfs else pl.DataFrame()
 
-        Sessions.validate(df)
+        Parameters.validate(df)
         return df
 
     def query(self, sql: str) -> pl.DataFrame:

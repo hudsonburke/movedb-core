@@ -16,7 +16,7 @@ from movedb.ingestion.adapters.c3d import (
     read_events,
     read_forceplates,
     read_markers,
-    read_session_params,
+    read_parameters,
 )
 
 DATA_DIR = Path(__file__).parent / "data" / "BAA01" / "Baseline"
@@ -211,23 +211,23 @@ class TestReadEvents:
 
 
 # ---------------------------------------------------------------------------
-# read_session_params
+# read_parameters
 # ---------------------------------------------------------------------------
 
 
-class TestReadSessionParams:
+class TestReadParameters:
     def test_returns_dict(self, walk01):
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
         assert isinstance(params, dict)
 
     def test_mass_is_present(self, walk01):
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
         assert "Mass" in params
         assert isinstance(params["Mass"], float)
         assert params["Mass"] > 0
 
     def test_bone_lengths_present(self, walk01):
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
         for key in ("RFemurLength", "RTibiaLength", "LFemurLength", "LTibiaLength"):
             assert key in params, f"Missing {key}"
             assert isinstance(params[key], float)
@@ -235,9 +235,9 @@ class TestReadSessionParams:
 
     def test_consistent_across_trials(self, all_c3d):
         """PROCESSING params should be the same for every trial in a session."""
-        ref = read_session_params(all_c3d[0])
+        ref = read_parameters(all_c3d[0])
         for path in all_c3d[1:]:
-            other = read_session_params(path)
+            other = read_parameters(path)
             assert other["Mass"] == pytest.approx(ref["Mass"]), path.name
 
 
@@ -308,7 +308,7 @@ class TestSchemaAttachment:
 
 
 # ---------------------------------------------------------------------------
-# Sessions schema extension with PROCESSING parameters
+# Parameters schema extension with PROCESSING parameters
 # ---------------------------------------------------------------------------
 
 # The core fields every session record should have.
@@ -375,51 +375,54 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
 }
 
 
-class TestSessionsSchemaExtension:
-    """Test extending Sessions schema with PROCESSING params from real C3D files."""
+class TestParametersSchemaExtension:
+    """Test extending Parameters schema with PROCESSING params from real C3D files."""
 
     def test_schema_extends_with_fields(self):
-        """Sessions.with_fields() should accept PROCESSING param types."""
-        from movedb.schemas.models import Sessions
+        """Parameters.with_fields() should accept PROCESSING param types."""
+        from movedb.schemas.models import Parameters
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         assert "Mass" in Extended.model_fields
         assert "RFemurLength" in Extended.model_fields
-        assert "subject_id" in Extended.model_fields  # base field preserved
+        assert "trial_name" in Extended.model_fields  # base field preserved
 
     def test_extended_schema_validates_dataframe(self, walk01):
         """A DataFrame built from real params should validate against extended schema."""
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
+        params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
         Extended.validate(df)
 
     def test_mass_value(self, walk01):
         """Mass from BAA01 Baseline should be ~0.283 kg."""
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
+        params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
         Extended.validate(df)
 
     def test_bone_lengths(self, walk01):
         """Bone lengths should match expected values for BAA01."""
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
+        params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
         Extended.validate(df)
 
@@ -428,13 +431,14 @@ class TestSessionsSchemaExtension:
         assert df["LFemurLength"][0] == pytest.approx(32.0)
         assert df["LTibiaLength"][0] == pytest.approx(41.0)
 
-    def test_all_files_produce_valid_session(self, all_c3d):
-        """Every C3D file in the session should produce a valid extended record."""
-        from movedb.schemas.models import Sessions
+    def test_all_files_produce_valid_params(self, all_c3d):
+        """Every C3D file in the session should produce a valid parameter record."""
+        from movedb.schemas.models import Parameters
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
-        for path in all_c3d:
-            params = read_session_params(path)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
+        for i, path in enumerate(all_c3d):
+            params = read_parameters(path)
+            params["trial_name"] = path.stem
             params["subject_id"] = SUBJECT_ID
             params["session_id"] = SESSION_ID
             df = pl.DataFrame([params])
@@ -442,40 +446,44 @@ class TestSessionsSchemaExtension:
 
     def test_rejects_unexpected_columns(self, walk01):
         """Schema should reject DataFrames with columns not in the field list."""
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
+        params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
         params["UnexpectedParam"] = 999.0  # not in schema
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
         with pytest.raises(Exception, match="Superfluous"):
             Extended.validate(df)
 
     def test_rejects_missing_required_columns(self, walk01):
         """Schema should reject DataFrames missing required columns."""
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
-        # Build a DF missing subject_id and session_id
-        params = read_session_params(walk01)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
+        # Build a DF missing trial_name, subject_id, session_id
+        params = read_parameters(walk01)
         df = pl.DataFrame([params])
         with pytest.raises(Exception):
             Extended.validate(df)
+
+    def test_extended_schema_is_patito_model(self):
         """Extended schema should still be a patito Model subclass."""
         import patito as pt
-        from movedb.schemas.models import Sessions
+        from movedb.schemas.models import Parameters
 
-        Extended = Sessions.with_fields(**_SESSION_BASE_FIELDS)
+        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         assert issubclass(Extended, pt.Model)
 
     def test_with_all_params(self, walk01):
-        """All params from read_session_params should be capturable."""
-        from movedb.schemas.models import Sessions
+        """All params from read_parameters should be capturable."""
+        from movedb.schemas.models import Parameters
 
-        params = read_session_params(walk01)
+        params = read_parameters(walk01)
+        params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
 
@@ -483,8 +491,8 @@ class TestSessionsSchemaExtension:
         all_fields = {
             k: (type(v), ...)
             for k, v in params.items()
-            if k not in ("subject_id", "session_id")
+            if k not in ("trial_name", "subject_id", "session_id")
         }
-        Extended = Sessions.with_fields(**all_fields)
+        Extended = Parameters.with_fields(**all_fields)
         df = pl.DataFrame([params])
         Extended.validate(df)

@@ -8,6 +8,7 @@ conventions are application-specific and left to the caller.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
@@ -32,15 +33,15 @@ def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
 def process_session(
     subject_id: str,
     session: str,
-    c3d_files: list[str | Path],
+    c3d_files: Sequence[str | Path],
     output_dir: str | Path,
 ) -> dict[str, pl.DataFrame]:
     """Convert a session's C3D files to Parquet.
 
     Also extracts PROCESSING parameters (mass, bone lengths) from C3D files
-    and writes them to sessions.parquet for use in model scaling.
+    and writes them to parameters.parquet for use in model scaling.
     """
-    from .adapters.c3d import read_markers, read_forceplates, read_events, read_session_params
+    from .adapters.c3d import read_markers, read_forceplates, read_events, read_parameters
 
     output_dir = Path(output_dir)
     subject_dir = output_dir / subject_id
@@ -49,7 +50,7 @@ def process_session(
     all_markers = []
     all_forceplates = []
     all_events = []
-    all_session_params = []
+    all_params = []
 
     for c3d_path in c3d_files:
         c3d_path = Path(c3d_path)
@@ -87,12 +88,13 @@ def process_session(
             if not events_df.is_empty():
                 all_events.append(events_df)
 
-            # Extract session parameters
-            session_params = read_session_params(c3d_path)
-            if session_params:
-                session_params["subject_id"] = subject_id
-                session_params["session_id"] = session
-                all_session_params.append(session_params)
+            # Extract trial parameters
+            trial_params = read_parameters(c3d_path)
+            if trial_params:
+                trial_params["trial_name"] = trial_name
+                trial_params["subject_id"] = subject_id
+                trial_params["session_id"] = session
+                all_params.append(trial_params)
 
         except Exception as e:
             logger.warning(f"  Failed to process {c3d_path}: {e}")
@@ -131,47 +133,22 @@ def process_session(
         result["events"].write_parquet(events_path)
         logger.info(f"  {subject_id}/{session}: {len(result['events'])} events")
 
-    # Write sessions.parquet
-    if all_session_params:
-        seen = set()
-        unique_params = []
-        for params in all_session_params:
-            key = (params.get("subject_id"), params.get("session_id"))
-            if key not in seen:
-                seen.add(key)
-                unique_params.append(params)
+    # Write parameters.parquet
+    if all_params:
+        params_df = pl.DataFrame(all_params)
+        params_df = _ensure_string_types(params_df)
 
-        sessions_df = pl.DataFrame(unique_params)
-        sessions_df = _ensure_string_types(sessions_df)
+        params_path = subject_dir / "parameters.parquet"
 
-        sessions_path = subject_dir / "sessions.parquet"
+        if params_path.exists():
+            existing = pl.read_parquet(params_path)
+            # Drop rows we're about to replace (matched by all three keys)
+            new_keys = params_df.select("trial_name", "subject_id", "session_id")
+            existing = existing.join(new_keys, on=["trial_name", "subject_id", "session_id"], how="anti")
+            params_df = pl.concat([existing, params_df], how="diagonal")
 
-        if sessions_path.exists():
-            existing = pl.read_parquet(sessions_path)
-
-            old_session = existing.filter(
-                (pl.col("subject_id") == subject_id) & (pl.col("session_id") == session)
-            )
-            if not old_session.is_empty():
-                for col in sessions_df.columns:
-                    if col in ("subject_id", "session_id"):
-                        continue
-                    if col in old_session.columns:
-                        old_val = old_session[col][0]
-                        new_val = sessions_df[col][0]
-                        if old_val != new_val:
-                            logger.warning(
-                                f"Parameter {col} differs for {subject_id}/{session}: "
-                                f"{old_val} vs {new_val}"
-                            )
-
-            existing = existing.filter(
-                ~((pl.col("subject_id") == subject_id) & (pl.col("session_id") == session))
-            )
-            sessions_df = pl.concat([existing, sessions_df], how="diagonal")
-
-        sessions_df.write_parquet(sessions_path)
-        result["sessions"] = sessions_df
-        logger.info(f"  {subject_id}/{session}: sessions parameters extracted")
+        params_df.write_parquet(params_path)
+        result["parameters"] = params_df
+        logger.info(f"  {subject_id}/{session}: {len(all_params)} trial parameters extracted")
 
     return result
