@@ -35,7 +35,7 @@ def get_param_strings(
     """Get parameter value as list of strings."""
     value = get_param_list(c3d, keys)
     if isinstance(value, np.ndarray):
-        return [str(v) for v in value.flat]
+        return value.astype(str).ravel().tolist()
     if value is None or len(value) == 0:
         return default if default is not None else []
     return [str(v) for v in value]
@@ -68,9 +68,9 @@ def read_markers(c3d_path: str | Path, trial_name: str, subject_id: str, session
     # Extract marker positions (3, n_markers, n_frames)
     data = c3d["data"]["points"]
     
-    # Create arrays for each column
+    # Create arrays for each column — derive times from frames to avoid duplicate arange
     frames = np.repeat(np.arange(n_frames), n_markers)
-    times = np.repeat(np.arange(n_frames) / point_rate, n_markers)
+    times = frames / point_rate
     marker_names = np.tile(labels, n_frames)
     x = data[0, :, :].T.flatten()
     y = data[1, :, :].T.flatten()
@@ -97,44 +97,59 @@ def read_forceplates(c3d_path: str | Path, trial_name: str, subject_id: str, ses
     """
     c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
     
-    point_rate = get_param(c3d, ["POINT", "RATE"], default=100.0)
-    n_frames = c3d["header"]["points"]["last_frame"] - c3d["header"]["points"]["first_frame"] + 1
-    
+    # Force plate data is sampled at the analog rate (often 1000 Hz),
+    # which can differ from the marker point rate (e.g. 200 Hz).
+    analog_rate = get_param(c3d, ["ANALOG", "RATE"], default=1000.0)
+
     platforms = c3d["data"].get("platform", [])
     if not platforms:
         return pl.DataFrame()
-    
-    all_frames = []
-    all_times = []
-    all_fp_names = []
-    all_variables = []
-    all_axes = []
-    all_values = []
-    
+
+    var_names = ("force", "moment", "cop")
+    var_keys = ("force", "moment", "center_of_pressure")
+    axis_names = ("x", "y", "z")
+    n_vars = len(var_names)
+    n_axes = len(axis_names)
+
+    frames_parts: list[np.ndarray] = []
+    times_parts: list[np.ndarray] = []
+    fp_names_parts: list[np.ndarray] = []
+    variables_parts: list[np.ndarray] = []
+    axes_parts: list[np.ndarray] = []
+    values_parts: list[np.ndarray] = []
+
     for fp_idx, platform in enumerate(platforms):
         fp_name = f"FP{fp_idx + 1}"
-        
-        for var_name, var_key in [("force", "force"), ("moment", "moment"), ("cop", "center_of_pressure")]:
-            data = platform.get(var_key, np.zeros((3, n_frames)))
-            
-            for axis_idx, axis_name in enumerate(["x", "y", "z"]):
-                all_frames.extend(range(n_frames))
-                all_times.extend([i / point_rate for i in range(n_frames)])
-                all_fp_names.extend([fp_name] * n_frames)
-                all_variables.extend([var_name] * n_frames)
-                all_axes.extend([axis_name] * n_frames)
-                all_values.extend(data[axis_idx, :].tolist())
-    
-    if not all_frames:
+
+        # Stack (3, N) arrays per variable → (n_vars, 3, N),
+        # then reshape + ravel to match var → axis → frame order.
+        # Derive frame count from the actual data, not the point header.
+        stacked = np.stack(
+            [platform.get(key, np.zeros((3, 1))) for key in var_keys]
+        )
+        n_fp_frames = stacked.shape[2]
+        stacked = stacked.reshape(-1)  # (n_vars * 3 * n_fp_frames,)
+
+        n_fp_rows = n_vars * n_axes * n_fp_frames
+        frame_idx = np.arange(n_fp_frames)
+
+        frames_parts.append(np.tile(frame_idx, n_vars * n_axes))
+        times_parts.append(np.tile(frame_idx, n_vars * n_axes) / analog_rate)
+        fp_names_parts.append(np.full(n_fp_rows, fp_name, dtype="U16"))
+        variables_parts.append(np.repeat(var_names, n_axes * n_fp_frames))
+        axes_parts.append(np.tile(np.repeat(axis_names, n_fp_frames), n_vars))
+        values_parts.append(stacked)
+
+    if not frames_parts:
         return pl.DataFrame()
-    
+
     return pl.DataFrame({
-        "frame": all_frames,
-        "time": all_times,
-        "fp_name": all_fp_names,
-        "variable": all_variables,
-        "axis": all_axes,
-        "value": all_values,
+        "frame": np.concatenate(frames_parts).astype(int),
+        "time": np.concatenate(times_parts),
+        "fp_name": np.concatenate(fp_names_parts),
+        "variable": np.concatenate(variables_parts),
+        "axis": np.concatenate(axes_parts),
+        "value": np.concatenate(values_parts),
         "trial_name": trial_name,
         "subject_id": subject_id,
         "session_id": session_id,
@@ -153,7 +168,7 @@ def read_events(c3d_path: str | Path, trial_name: str, subject_id: str, session_
     labels = get_param_strings(c3d, ["EVENT", "LABELS"])
     times = get_param_list(c3d, ["EVENT", "TIMES"])
     
-    if times is None or len(times.shape) != 2 or times.shape[1] == 0:
+    if not isinstance(times, np.ndarray) or times.ndim != 2 or times.shape[1] == 0:
         return pl.DataFrame()
     
     # Convert times to seconds
