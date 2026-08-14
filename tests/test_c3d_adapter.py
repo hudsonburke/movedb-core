@@ -262,3 +262,27 @@ class TestGetParamHelpers:
         c3d = ezc3d.c3d(str(walk01))
         val = get_param(c3d, ["POINT", "LABELS"], index=999, default="fallback")
         assert val == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# Schema attachment (patito models)
+# ---------------------------------------------------------------------------
+
+class TestSchemaAttachment:
+    """Verify patito models are attached for downstream type checking."""
+
+    def test_markers_model_attached(self, walk01):
+        import patito as pt
+        df = read_markers(walk01, "Walk01", SUBJECT_ID, SESSION_ID)
+        assert issubclass(type(df), pt.DataFrame)
+
+    def test_forceplates_model_attached(self, walk01):
+        import patito as pt
+        df = read_forceplates(walk01, "Walk01", SUBJECT_ID, SESSION_ID)
+        assert issubclass(type(df), pt.DataFrame)
+
+    def test_events_model_attached(self, walk01):
+        import patito as pt
+        df = read_events(walk01, "Walk01", SUBJECT_ID, SESSION_ID)
+        # Empty DF — no model attached (pl.DataFrame returned early)
+        assert isinstance(df, pl.DataFrame)

@@ -13,6 +13,8 @@ import ezc3d
 import numpy as np
 import polars as pl
 
+from movedb.schemas.models import Events, Forceplates, Markers
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,7 +78,7 @@ def read_markers(c3d_path: str | Path, trial_name: str, subject_id: str, session
     y = data[1, :, :].T.flatten()
     z = data[2, :, :].T.flatten()
     
-    return pl.DataFrame({
+    return Markers.DataFrame({
         "frame": frames.astype(int),
         "time": times,
         "marker_name": marker_names,
@@ -143,7 +145,7 @@ def read_forceplates(c3d_path: str | Path, trial_name: str, subject_id: str, ses
     if not frames_parts:
         return pl.DataFrame()
 
-    return pl.DataFrame({
+    return Forceplates.DataFrame({
         "frame": np.concatenate(frames_parts).astype(int),
         "time": np.concatenate(times_parts),
         "fp_name": np.concatenate(fp_names_parts),
@@ -179,7 +181,7 @@ def read_events(c3d_path: str | Path, trial_name: str, subject_id: str, session_
     contexts = contexts[:n_events] + [""] * (n_events - len(contexts))
     labels = labels[:n_events] + [""] * (n_events - len(labels))
     
-    return pl.DataFrame({
+    return Events.DataFrame({
         "context": contexts,
         "label": labels,
         "time": times_sec.tolist(),
