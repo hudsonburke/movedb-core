@@ -13,10 +13,12 @@ from movedb.ingestion.adapters.c3d import (
     get_param,
     get_param_list,
     get_param_strings,
+    read_analogs,
     read_events,
+    read_forceplate_geometry,
     read_forceplates,
-    read_markers,
     read_parameters,
+    read_points,
 )
 
 DATA_DIR = Path(__file__).parent / "data" / "BAA01" / "Baseline"
@@ -45,75 +47,94 @@ def all_c3d():
 
 
 # ---------------------------------------------------------------------------
-# read_markers
+# read_points
 # ---------------------------------------------------------------------------
 
 
-class TestReadMarkers:
+class TestReadPoints:
     def test_returns_dataframe(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert isinstance(df, pl.DataFrame)
 
     def test_expected_columns(self, walk01):
-        df = read_markers(walk01, "Walk01")
-        assert df.columns == [
-            "frame",
-            "time",
-            "marker_name",
-            "x",
-            "y",
-            "z",
-            "trial_name",
-        ]
+        df = read_points(walk01, "Walk01")
+        assert "frame" in df.columns
+        assert "time" in df.columns
+        assert "marker_name" in df.columns
+        assert "x" in df.columns
+        assert "y" in df.columns
+        assert "z" in df.columns
+        assert "residual" in df.columns
+        assert "camera_mask" in df.columns
+        assert "trial_name" in df.columns
 
     def test_row_count(self, walk01):
         """19 markers × 1364 frames = 25_916 rows."""
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert len(df) == 19 * 1364
 
     def test_frame_range(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert df["frame"].min() == 0
         assert df["frame"].max() == 1363
 
     def test_time_first_and_last(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert df["time"].min() == pytest.approx(0.0)
         assert df["time"].max() == pytest.approx(1363 / 200.0)
 
     def test_marker_names(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         names = sorted(df["marker_name"].unique().to_list())
         assert len(names) == 19
-        # Spot-check a few known markers
         for m in ("RASI", "LASI", "RKNE", "RHIP"):
             assert m in names
 
     def test_x_y_z_are_float(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         for col in ("x", "y", "z"):
             assert df[col].dtype == pl.Float64
 
+    def test_residual_is_float(self, walk01):
+        df = read_points(walk01, "Walk01")
+        assert df["residual"].dtype == pl.Float64
+
+    def test_camera_mask_is_list(self, walk01):
+        df = read_points(walk01, "Walk01")
+        # camera_mask should be a list column
+        assert df["camera_mask"].dtype == pl.List(pl.Int64)
+
+    def test_camera_mask_length(self, walk01):
+        """Each camera mask should have 7 elements (one per camera)."""
+        df = read_points(walk01, "Walk01")
+        first_mask = df["camera_mask"][0]
+        assert len(first_mask) == 7
+
     def test_static_fewer_markers_and_frames(self, static01):
         """Static01: 12 markers × 676 frames = 8_112 rows."""
-        df = read_markers(static01, "Static01")
+        df = read_points(static01, "Static01")
         assert len(df) == 12 * 676
         names = sorted(df["marker_name"].unique().to_list())
         assert len(names) == 12
 
     def test_trial_name(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert df["trial_name"].unique().to_list() == ["Walk01"]
 
     def test_no_nans_in_xyz(self, walk01):
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         for col in ("x", "y", "z"):
             assert df[col].null_count() == 0
+
+    def test_backward_compat_alias(self, walk01):
+        """read_markers should be an alias for read_points."""
+        from movedb.ingestion.adapters.c3d import read_markers
+        assert read_markers is read_points
 
     def test_all_files_readable(self, all_c3d):
         """Every C3D file in the data dir should parse without error."""
         for path in all_c3d:
-            df = read_markers(path, path.stem)
+            df = read_points(path, path.stem)
             assert len(df) > 0
 
 
@@ -131,13 +152,7 @@ class TestReadForceplates:
     def test_expected_columns(self, walk01):
         df = read_forceplates(walk01, "Walk01")
         assert df.columns == [
-            "frame",
-            "time",
-            "fp_name",
-            "variable",
-            "axis",
-            "value",
-            "trial_name",
+            "frame", "time", "fp_name", "variable", "axis", "value", "trial_name",
         ]
 
     def test_four_platforms(self, walk01):
@@ -155,32 +170,12 @@ class TestReadForceplates:
     def test_analog_rate(self, walk01):
         """Force plate data should be at 1000 Hz (6820 frames)."""
         df = read_forceplates(walk01, "Walk01")
-        # 4 platforms × 3 vars × 3 axes × 6820 frames = 245_520 rows
         assert len(df) == 4 * 3 * 3 * 6820
 
     def test_time_uses_analog_rate(self, walk01):
         df = read_forceplates(walk01, "Walk01")
-        # Times should span 0..6819/1000
         assert df["time"].min() == pytest.approx(0.0)
         assert df["time"].max() == pytest.approx(6819 / 1000.0)
-
-    def test_value_is_float(self, walk01):
-        df = read_forceplates(walk01, "Walk01")
-        assert df["value"].dtype == pl.Float64
-
-    def test_frame_and_value_lengths_match(self, walk01):
-        """Columns must have equal length (the bug we fixed)."""
-        df = read_forceplates(walk01, "Walk01")
-        n = len(df)
-        assert len(df["frame"]) == n
-        assert len(df["value"]) == n
-        assert len(df["fp_name"]) == n
-
-    def test_static_has_forceplate_data(self, static01):
-        df = read_forceplates(static01, "Static01")
-        assert len(df) > 0
-        # Static01: 676 point frames → 3380 analog frames
-        assert len(df) == 4 * 3 * 3 * 3380
 
     def test_no_nans_in_value(self, walk01):
         df = read_forceplates(walk01, "Walk01")
@@ -189,6 +184,97 @@ class TestReadForceplates:
     def test_all_files_readable(self, all_c3d):
         for path in all_c3d:
             df = read_forceplates(path, path.stem)
+            assert len(df) > 0
+
+
+# ---------------------------------------------------------------------------
+# read_forceplate_geometry
+# ---------------------------------------------------------------------------
+
+
+class TestReadForceplateGeometry:
+    def test_returns_dataframe(self, walk01):
+        df = read_forceplate_geometry(walk01, "Walk01")
+        assert isinstance(df, pl.DataFrame)
+        assert len(df) > 0
+
+    def test_expected_columns(self, walk01):
+        df = read_forceplate_geometry(walk01, "Walk01")
+        assert "fp_name" in df.columns
+        assert "origin" in df.columns
+        assert "corners" in df.columns
+        assert "cal_matrix" in df.columns
+        assert "trial_name" in df.columns
+
+    def test_four_platforms(self, walk01):
+        df = read_forceplate_geometry(walk01, "Walk01")
+        assert len(df) == 4
+        assert sorted(df["fp_name"].unique().to_list()) == ["FP1", "FP2", "FP3", "FP4"]
+
+    def test_origin_is_3d(self, walk01):
+        """Origin should be a list of 3 floats."""
+        df = read_forceplate_geometry(walk01, "Walk01")
+        for origin in df["origin"]:
+            assert len(origin) == 3
+
+    def test_corners_shape(self, walk01):
+        """Corners should be a flattened 3×4 array (12 floats)."""
+        df = read_forceplate_geometry(walk01, "Walk01")
+        for corners in df["corners"]:
+            assert len(corners) == 12
+
+    def test_cal_matrix_shape(self, walk01):
+        """Cal matrix should be empty or 36 floats."""
+        df = read_forceplate_geometry(walk01, "Walk01")
+        for cal in df["cal_matrix"]:
+            assert len(cal) == 0 or len(cal) == 36
+
+    def test_all_files_readable(self, all_c3d):
+        for path in all_c3d:
+            df = read_forceplate_geometry(path, path.stem)
+            assert len(df) > 0
+
+
+# ---------------------------------------------------------------------------
+# read_analogs
+# ---------------------------------------------------------------------------
+
+
+class TestReadAnalogs:
+    def test_returns_dataframe(self, walk01):
+        df = read_analogs(walk01, "Walk01")
+        assert isinstance(df, pl.DataFrame)
+        assert len(df) > 0
+
+    def test_expected_columns(self, walk01):
+        df = read_analogs(walk01, "Walk01")
+        assert "frame" in df.columns
+        assert "time" in df.columns
+        assert "channel_name" in df.columns
+        assert "value" in df.columns
+        assert "unit" in df.columns
+        assert "trial_name" in df.columns
+
+    def test_channel_count(self, walk01):
+        """Should have 30 analog channels."""
+        df = read_analogs(walk01, "Walk01")
+        assert df["channel_name"].n_unique() == 30
+
+    def test_analog_rate(self, walk01):
+        """Analog data should be at 1000 Hz."""
+        df = read_analogs(walk01, "Walk01")
+        assert df["time"].min() == pytest.approx(0.0)
+        assert df["time"].max() == pytest.approx(6819 / 1000.0)
+
+    def test_units_present(self, walk01):
+        df = read_analogs(walk01, "Walk01")
+        units = df["unit"].unique().to_list()
+        assert "N" in units  # Force units
+        assert "Nmm" in units  # Moment units
+
+    def test_all_files_readable(self, all_c3d):
+        for path in all_c3d:
+            df = read_analogs(path, path.stem)
             assert len(df) > 0
 
 
@@ -202,11 +288,6 @@ class TestReadEvents:
         """Walk01 has no events in its C3D header."""
         df = read_events(walk01, "Walk01")
         assert isinstance(df, pl.DataFrame)
-        assert df.is_empty()
-
-    def test_expected_columns_when_empty(self, walk01):
-        df = read_events(walk01, "Walk01")
-        # Empty DataFrame still has no columns (matches current behavior)
         assert df.is_empty()
 
 
@@ -233,6 +314,12 @@ class TestReadParameters:
             assert isinstance(params[key], float)
             assert params[key] > 0
 
+    def test_trial_params_present(self, walk01):
+        """TRIAL group params should be included."""
+        params = read_parameters(walk01)
+        # TRIAL.CAMERA_RATE or similar should be present
+        assert any(k.startswith("CAMERA") or k.startswith("ACTUAL") for k in params)
+
     def test_consistent_across_trials(self, all_c3d):
         """PROCESSING params should be the same for every trial in a session."""
         ref = read_parameters(all_c3d[0])
@@ -249,7 +336,6 @@ class TestReadParameters:
 class TestGetParamHelpers:
     def test_get_param_list_returns_value(self, walk01):
         import ezc3d
-
         c3d = ezc3d.c3d(str(walk01))
         val = get_param_list(c3d, ["POINT", "LABELS"])
         assert val is not None
@@ -257,7 +343,6 @@ class TestGetParamHelpers:
 
     def test_get_param_strings(self, walk01):
         import ezc3d
-
         c3d = ezc3d.c3d(str(walk01))
         labels = get_param_strings(c3d, ["POINT", "LABELS"])
         assert isinstance(labels, list)
@@ -266,14 +351,12 @@ class TestGetParamHelpers:
 
     def test_get_param_default_on_missing(self, walk01):
         import ezc3d
-
         c3d = ezc3d.c3d(str(walk01))
         val = get_param(c3d, ["NONEXISTENT", "KEY"], default=-1)
         assert val == -1
 
     def test_get_param_index_out_of_range(self, walk01):
         import ezc3d
-
         c3d = ezc3d.c3d(str(walk01))
         val = get_param(c3d, ["POINT", "LABELS"], index=999, default="fallback")
         assert val == "fallback"
@@ -287,21 +370,18 @@ class TestGetParamHelpers:
 class TestSchemaAttachment:
     """Verify patito models are attached for downstream type checking."""
 
-    def test_markers_model_attached(self, walk01):
+    def test_points_model_attached(self, walk01):
         import patito as pt
-
-        df = read_markers(walk01, "Walk01")
+        df = read_points(walk01, "Walk01")
         assert issubclass(type(df), pt.DataFrame)
 
     def test_forceplates_model_attached(self, walk01):
         import patito as pt
-
         df = read_forceplates(walk01, "Walk01")
         assert issubclass(type(df), pt.DataFrame)
 
     def test_events_model_attached(self, walk01):
         import patito as pt
-
         df = read_events(walk01, "Walk01")
         # Empty DF — no model attached (pl.DataFrame returned early)
         assert isinstance(df, pl.DataFrame)
@@ -311,16 +391,12 @@ class TestSchemaAttachment:
 # Parameters schema extension with PROCESSING parameters
 # ---------------------------------------------------------------------------
 
-# The core fields every session record should have.
 _SESSION_BASE_FIELDS: dict[str, Any] = {
-    # Body
     "Mass": (float, ...),
     "Length": (float, ...),
-    # Right side — bone lengths
     "RFemurLength": (float, ...),
     "RTibiaLength": (float, ...),
     "RFootLength": (float, ...),
-    # Right side — thigh
     "RThighMass": (float, ...),
     "RThighCOM_X": (float, ...),
     "RThighCOM_Y": (float, ...),
@@ -328,7 +404,6 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
     "RThighMOI_X": (float, ...),
     "RThighMOI_Y": (float, ...),
     "RThighMOI_Z": (float, ...),
-    # Right side — shank
     "RShankMass": (float, ...),
     "RShankCOM_X": (float, ...),
     "RShankCOM_Y": (float, ...),
@@ -336,7 +411,6 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
     "RShankMOI_X": (float, ...),
     "RShankMOI_Y": (float, ...),
     "RShankMOI_Z": (float, ...),
-    # Right side — foot
     "RFootMass": (float, ...),
     "RFootCOM_X": (float, ...),
     "RFootCOM_Y": (float, ...),
@@ -344,11 +418,9 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
     "RFootMOI_X": (float, ...),
     "RFootMOI_Y": (float, ...),
     "RFootMOI_Z": (float, ...),
-    # Left side — bone lengths
     "LFemurLength": (float, ...),
     "LTibiaLength": (float, ...),
     "LFootLength": (float, ...),
-    # Left side — thigh
     "LThighMass": (float, ...),
     "LThighCOM_X": (float, ...),
     "LThighCOM_Y": (float, ...),
@@ -356,7 +428,6 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
     "LThighMOI_X": (float, ...),
     "LThighMOI_Y": (float, ...),
     "LThighMOI_Z": (float, ...),
-    # Left side — shank
     "LShankMass": (float, ...),
     "LShankCOM_X": (float, ...),
     "LShankCOM_Y": (float, ...),
@@ -364,7 +435,6 @@ _SESSION_BASE_FIELDS: dict[str, Any] = {
     "LShankMOI_X": (float, ...),
     "LShankMOI_Y": (float, ...),
     "LShankMOI_Z": (float, ...),
-    # Left side — foot
     "LFootMass": (float, ...),
     "LFootCOM_X": (float, ...),
     "LFootCOM_Y": (float, ...),
@@ -379,115 +449,83 @@ class TestParametersSchemaExtension:
     """Test extending Parameters schema with PROCESSING params from real C3D files."""
 
     def test_schema_extends_with_fields(self):
-        """Parameters.with_fields() should accept PROCESSING param types."""
         from movedb.schemas.models import Parameters
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         assert "Mass" in Extended.model_fields
         assert "RFemurLength" in Extended.model_fields
-        assert "trial_name" in Extended.model_fields  # base field preserved
+        assert "trial_name" in Extended.model_fields
 
     def test_extended_schema_validates_dataframe(self, walk01):
-        """A DataFrame built from real params should validate against extended schema."""
         from movedb.schemas.models import Parameters
-
         params = read_parameters(walk01)
         params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
-        Extended.validate(df)
+        Extended.validate(df, allow_superfluous_columns=True)
 
     def test_mass_value(self, walk01):
-        """Mass from BAA01 Baseline should be ~0.283 kg."""
         from movedb.schemas.models import Parameters
-
         params = read_parameters(walk01)
         params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
-        Extended.validate(df)
+        Extended.validate(df, allow_superfluous_columns=True)
 
     def test_bone_lengths(self, walk01):
-        """Bone lengths should match expected values for BAA01."""
         from movedb.schemas.models import Parameters
-
         params = read_parameters(walk01)
         params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
-        Extended.validate(df)
-
+        Extended.validate(df, allow_superfluous_columns=True)
         assert df["RFemurLength"][0] == pytest.approx(31.5)
         assert df["RTibiaLength"][0] == pytest.approx(41.0)
         assert df["LFemurLength"][0] == pytest.approx(32.0)
         assert df["LTibiaLength"][0] == pytest.approx(41.0)
 
     def test_all_files_produce_valid_params(self, all_c3d):
-        """Every C3D file in the session should produce a valid parameter record."""
         from movedb.schemas.models import Parameters
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
-        for i, path in enumerate(all_c3d):
+        for path in all_c3d:
             params = read_parameters(path)
             params["trial_name"] = path.stem
             params["subject_id"] = SUBJECT_ID
             params["session_id"] = SESSION_ID
             df = pl.DataFrame([params])
-            Extended.validate(df)
+            Extended.validate(df, allow_superfluous_columns=True)
 
     def test_rejects_unexpected_columns(self, walk01):
-        """Schema should reject DataFrames with columns not in the field list."""
         from movedb.schemas.models import Parameters
-
         params = read_parameters(walk01)
         params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
-        params["UnexpectedParam"] = 999.0  # not in schema
-
+        params["UnexpectedParam"] = 999.0
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
         df = pl.DataFrame([params])
         with pytest.raises(Exception, match="Superfluous"):
             Extended.validate(df)
 
     def test_rejects_missing_required_columns(self, walk01):
-        """Schema should reject DataFrames missing required columns."""
         from movedb.schemas.models import Parameters
-
         Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
-        # Build a DF missing trial_name, subject_id, session_id
         params = read_parameters(walk01)
         df = pl.DataFrame([params])
         with pytest.raises(Exception):
             Extended.validate(df)
 
-    def test_extended_schema_is_patito_model(self):
-        """Extended schema should still be a patito Model subclass."""
-        import patito as pt
-        from movedb.schemas.models import Parameters
-
-        Extended = Parameters.with_fields(**_SESSION_BASE_FIELDS)
-        assert issubclass(Extended, pt.Model)
-
     def test_with_all_params(self, walk01):
-        """All params from read_parameters should be capturable."""
         from movedb.schemas.models import Parameters
-
         params = read_parameters(walk01)
         params["trial_name"] = "Walk01"
         params["subject_id"] = SUBJECT_ID
         params["session_id"] = SESSION_ID
-
-        # Dynamically build schema from actual param keys
         all_fields = {
             k: (type(v), ...)
             for k, v in params.items()

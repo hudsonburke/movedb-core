@@ -3,12 +3,20 @@
 import polars as pl
 import pytest
 
-from movedb.schemas import TrialMetadata, Markers, Forceplates, Events, Parameters
+from movedb.schemas import (
+    TrialMetadata,
+    Points,
+    Forceplates,
+    ForceplateGeometry,
+    Analogs,
+    Events,
+    Parameters,
+)
 
 
-class TestMarkers:
+class TestPoints:
     def test_valid_schema(self):
-        """Test that Markers schema validates correct data."""
+        """Test that Points schema validates correct data."""
         df = pl.DataFrame(
             {
                 "frame": [0, 1, 2],
@@ -17,12 +25,14 @@ class TestMarkers:
                 "x": [1.0, 1.1, 1.2],
                 "y": [2.0, 2.1, 2.2],
                 "z": [3.0, 3.1, 3.2],
+                "residual": [0.1, 0.2, 0.3],
+                "camera_mask": [[1, 1, 1, 1, 1, 1, 1]] * 3,
                 "trial_name": ["Walk01"] * 3,
                 "subject_id": ["BAA01"] * 3,
                 "session_id": ["baseline"] * 3,
             }
         )
-        Markers.validate(df)
+        Points.validate(df)
 
     def test_from_parquet(self, tmp_path):
         """Test loading from Parquet file."""
@@ -34,16 +44,18 @@ class TestMarkers:
                 "x": [1.0, 1.1],
                 "y": [2.0, 2.1],
                 "z": [3.0, 3.1],
+                "residual": [0.1, 0.2],
+                "camera_mask": [[1, 1, 1, 1, 1, 1, 1]] * 2,
                 "trial_name": ["Walk01"] * 2,
                 "subject_id": ["BAA01"] * 2,
                 "session_id": ["baseline"] * 2,
             }
         )
-        path = tmp_path / "markers.parquet"
+        path = tmp_path / "points.parquet"
         df.write_parquet(path)
 
         loaded = pl.read_parquet(path)
-        Markers.validate(loaded)
+        Points.validate(loaded)
 
 
 class TestForceplates:
@@ -63,6 +75,41 @@ class TestForceplates:
             }
         )
         Forceplates.validate(df)
+
+
+class TestForceplateGeometry:
+    def test_valid_schema(self):
+        """Test that ForceplateGeometry schema validates correct data."""
+        df = pl.DataFrame(
+            {
+                "fp_name": ["FP1"],
+                "origin": [[0.0, 0.0, 0.0]],
+                "corners": [[0.0] * 12],
+                "cal_matrix": [[0.0] * 36],
+                "trial_name": ["Walk01"],
+                "subject_id": ["BAA01"],
+                "session_id": ["baseline"],
+            }
+        )
+        ForceplateGeometry.validate(df)
+
+
+class TestAnalogs:
+    def test_valid_schema(self):
+        """Test that Analogs schema validates correct data."""
+        df = pl.DataFrame(
+            {
+                "frame": [0, 1],
+                "time": [0.0, 0.001],
+                "channel_name": ["Force.Fx1", "Force.Fx1"],
+                "value": [10.0, 20.0],
+                "unit": ["N", "N"],
+                "trial_name": ["Walk01"] * 2,
+                "subject_id": ["BAA01"] * 2,
+                "session_id": ["baseline"] * 2,
+            }
+        )
+        Analogs.validate(df)
 
 
 class TestEvents:
@@ -93,9 +140,9 @@ class TestTrialMetadata:
         )
         TrialMetadata.validate(df)
 
-    def test_inherited_by_markers(self):
-        """Test that Markers inherits from TrialMetadata."""
-        assert issubclass(Markers, TrialMetadata)
+    def test_inherited_by_points(self):
+        """Test that Points inherits from TrialMetadata."""
+        assert issubclass(Points, TrialMetadata)
 
     def test_inherited_by_forceplates(self):
         """Test that Forceplates inherits from TrialMetadata."""

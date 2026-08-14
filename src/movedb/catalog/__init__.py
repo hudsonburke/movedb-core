@@ -12,7 +12,7 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
-from ..schemas import Markers, Forceplates, Events, Parameters
+from ..schemas import Points, Forceplates, ForceplateGeometry, Analogs, Events, Parameters
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,10 @@ class MoveDB:
         db = MoveDB(Path("data/processed"))
 
         # Load with schema validation
-        markers = db.get_markers("BAA01", "baseline")
+        points = db.get_points("BAA01", "baseline")
 
         # SQL query across all subjects
-        df = db.query("SELECT subject_id, AVG(mass) FROM sessions GROUP BY subject_id")
+        df = db.query("SELECT subject_id, AVG(mass) FROM parameters GROUP BY subject_id")
     """
 
     def __init__(self, data_dir: Path):
@@ -43,22 +43,27 @@ class MoveDB:
 
     def _register_tables(self):
         """Register all Parquet files as DuckDB tables."""
+        import re
+
         for subject_dir in sorted(self.data_dir.iterdir()):
             if not subject_dir.is_dir():
                 continue
 
             for parquet in subject_dir.glob("*.parquet"):
+                # Sanitize table name to valid identifier
                 table_name = f"{subject_dir.name}_{parquet.stem}"
+                table_name = re.sub(r"[^a-zA-Z0-9_]", "_", table_name)
                 try:
                     self.conn.execute(
-                        f"CREATE OR REPLACE TABLE {table_name} "
-                        f"AS SELECT * FROM read_parquet('{parquet}')"
+                        "CREATE OR REPLACE TABLE "
+                        f"{table_name} AS SELECT * FROM read_parquet(?)",
+                        [str(parquet)],
                     )
                 except Exception as e:
                     logger.warning(f"Failed to register {parquet}: {e}")
 
-    def get_markers(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
-        """Load markers with schema validation.
+    def get_points(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
+        """Load 3D point positions with schema validation.
 
         Parameters
         ----------
@@ -70,13 +75,13 @@ class MoveDB:
         Returns
         -------
         pl.DataFrame
-            Validated markers DataFrame.
+            Validated points DataFrame.
         """
-        path = self.data_dir / subject_id / "markers.parquet"
+        path = self.data_dir / subject_id / "points.parquet"
         df = pl.read_parquet(path)
         if session:
             df = df.filter(pl.col("session_id") == session)
-        Markers.validate(df)
+        Points.validate(df)
         return df
 
     def get_forceplates(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
@@ -86,6 +91,24 @@ class MoveDB:
         if session:
             df = df.filter(pl.col("session_id") == session)
         Forceplates.validate(df)
+        return df
+
+    def get_forceplate_geometry(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
+        """Load force plate calibration with schema validation."""
+        path = self.data_dir / subject_id / "forceplate_geometry.parquet"
+        df = pl.read_parquet(path)
+        if session:
+            df = df.filter(pl.col("session_id") == session)
+        ForceplateGeometry.validate(df)
+        return df
+
+    def get_analogs(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
+        """Load raw analog channels with schema validation."""
+        path = self.data_dir / subject_id / "analogs.parquet"
+        df = pl.read_parquet(path)
+        if session:
+            df = df.filter(pl.col("session_id") == session)
+        Analogs.validate(df)
         return df
 
     def get_events(self, subject_id: str, session: str | None = None) -> pl.DataFrame:
@@ -112,7 +135,7 @@ class MoveDB:
                         dfs.append(pl.read_parquet(params_path))
             df = pl.concat(dfs, how="diagonal") if dfs else pl.DataFrame()
 
-        Parameters.validate(df)
+        Parameters.validate(df, allow_superfluous_columns=True)
         return df
 
     def query(self, sql: str) -> pl.DataFrame:
@@ -134,13 +157,13 @@ class MoveDB:
         """List available subjects."""
         return sorted([
             d.name for d in self.data_dir.iterdir()
-            if d.is_dir() and (d / "markers.parquet").exists()
+            if d.is_dir() and (d / "points.parquet").exists()
         ])
 
     def sessions(self, subject_id: str) -> list[str]:
         """List available sessions for a subject."""
-        sessions_path = self.data_dir / subject_id / "sessions.parquet"
-        if not sessions_path.exists():
+        params_path = self.data_dir / subject_id / "parameters.parquet"
+        if not params_path.exists():
             return []
-        df = pl.read_parquet(sessions_path)
+        df = pl.read_parquet(params_path)
         return sorted(df["session_id"].unique().to_list())

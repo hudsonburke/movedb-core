@@ -7,11 +7,12 @@ Schema hierarchy:
     - TrialMetadata: Base identity for all trial-level records
     - *Data schemas: Pure C3D data (adapter output, no metadata)
     - Composed schemas: TrialMetadata + data (ingestion/cataloging)
-    - Parameters: Extensible schema for trial-level PROCESSING parameters
+    - Parameters: Extensible schema for trial-level parameters
 """
 
 from __future__ import annotations
 
+import polars as pl
 import patito as pt
 
 
@@ -24,8 +25,8 @@ class TrialMetadata(pt.Model):
     """Base identity for all trial-level records.
 
     Every C3D file belongs to a trial within a session for a subject.
-    This schema captures that identity and is inherited by Markers,
-    Forceplates, Events, and Parameters.
+    This schema captures that identity and is inherited by Points,
+    Forceplates, Events, ForceplateGeometry, Analogs, and Parameters.
     """
 
     trial_name: str
@@ -38,11 +39,14 @@ class TrialMetadata(pt.Model):
 # ---------------------------------------------------------------------------
 
 
-class MarkersData(pt.Model):
-    """Marker positions without metadata.
+class PointsData(pt.Model):
+    """3D point positions without metadata.
 
     One row per (frame, marker) combination.
-    Returned directly by read_markers().
+    Returned directly by read_points().
+
+    Includes residual (tracking error) and camera_mask (which cameras
+    saw the marker) for data quality filtering.
     """
 
     frame: int
@@ -51,6 +55,8 @@ class MarkersData(pt.Model):
     x: float
     y: float
     z: float
+    residual: float
+    camera_mask: list[int]
 
 
 class ForceplatesData(pt.Model):
@@ -66,6 +72,37 @@ class ForceplatesData(pt.Model):
     variable: str  # force, moment, cop
     axis: str  # x, y, z
     value: float
+
+
+class ForceplateGeometryData(pt.Model):
+    """Force plate calibration and positioning without metadata.
+
+    One row per plate per trial.
+    Returned directly by read_forceplate_geometry().
+
+    Origin is a 3D point (list of 3 floats).
+    Corners is a flattened 3x4 array (12 floats).
+    Cal_matrix is a flattened 6x6 array (36 floats).
+    """
+
+    fp_name: str
+    origin: list[float]
+    corners: list[float]
+    cal_matrix: list[float]
+
+
+class AnalogsData(pt.Model):
+    """Raw analog channel data without metadata.
+
+    One row per (frame, channel) combination.
+    Returned directly by read_analogs().
+    """
+
+    frame: int
+    time: float
+    channel_name: str
+    value: float
+    unit: str
 
 
 class EventsData(pt.Model):
@@ -84,12 +121,12 @@ class EventsData(pt.Model):
 # ---------------------------------------------------------------------------
 
 
-class Markers(TrialMetadata, MarkersData):
-    """Marker positions with trial metadata.
+class Points(TrialMetadata, PointsData):
+    """3D point positions with trial metadata.
 
     Used for Parquet ingestion and catalog queries.
-    Inherits frame, time, marker_name, x, y, z from MarkersData
-    and trial_name, subject_id, session_id from TrialMetadata.
+    Inherits frame, time, marker_name, x, y, z, residual, camera_mask
+    from PointsData and trial_name, subject_id, session_id from TrialMetadata.
     """
 
 
@@ -98,6 +135,24 @@ class Forceplates(TrialMetadata, ForceplatesData):
 
     Used for Parquet ingestion and catalog queries.
     Inherits frame, time, fp_name, variable, axis, value from ForceplatesData
+    and trial_name, subject_id, session_id from TrialMetadata.
+    """
+
+
+class ForceplateGeometry(TrialMetadata, ForceplateGeometryData):
+    """Force plate calibration with trial metadata.
+
+    Used for Parquet ingestion and catalog queries.
+    Inherits fp_name, origin, corners, cal_matrix from ForceplateGeometryData
+    and trial_name, subject_id, session_id from TrialMetadata.
+    """
+
+
+class Analogs(TrialMetadata, AnalogsData):
+    """Raw analog channels with trial metadata.
+
+    Used for Parquet ingestion and catalog queries.
+    Inherits frame, time, channel_name, value, unit from AnalogsData
     and trial_name, subject_id, session_id from TrialMetadata.
     """
 
@@ -112,15 +167,17 @@ class Events(TrialMetadata, EventsData):
 
 
 # ---------------------------------------------------------------------------
-# Parameters — extensible trial-level PROCESSING parameters
+# Parameters — extensible trial-level parameters
 # ---------------------------------------------------------------------------
 
 
 class Parameters(TrialMetadata):
-    """Trial-level PROCESSING parameters from C3D files.
+    """Trial-level parameters from C3D files.
 
-    Each C3D file contains parameters (e.g. Mass, bone lengths) that
-    are typically consistent across trials in a session but can differ.
+    Each C3D file contains PROCESSING parameters (e.g. Mass, bone lengths),
+    TRIAL parameters (e.g. camera rate, coordinate directions), and
+    ANALYSIS parameters. These are typically consistent across trials
+    in a session but can differ.
 
     Applications extend with .with_fields() for use-case specific parameters::
 
