@@ -60,34 +60,33 @@ def read_markers(c3d_path: str | Path, trial_name: str, subject_id: str, session
     """
     c3d = ezc3d.c3d(str(c3d_path))
     
-    # Get marker data
     point_rate = get_param(c3d, ["POINT", "RATE"], default=100.0)
     n_frames = c3d["header"]["points"]["last_frame"] - c3d["header"]["points"]["first_frame"] + 1
     labels = get_param_strings(c3d, ["POINT", "LABELS"])
+    n_markers = len(labels)
     
     # Extract marker positions (3, n_markers, n_frames)
     data = c3d["data"]["points"]
     
-    rows = []
-    for frame_idx in range(n_frames):
-        time = frame_idx / point_rate
-        for marker_idx, marker_name in enumerate(labels):
-            x = data[0, marker_idx, frame_idx]
-            y = data[1, marker_idx, frame_idx]
-            z = data[2, marker_idx, frame_idx]
-            rows.append({
-                "frame": frame_idx,
-                "time": time,
-                "marker_name": marker_name,
-                "x": float(x),
-                "y": float(y),
-                "z": float(z),
-                "trial_name": trial_name,
-                "subject_id": subject_id,
-                "session_id": session_id,
-            })
+    # Create arrays for each column
+    frames = np.repeat(np.arange(n_frames), n_markers)
+    times = np.repeat(np.arange(n_frames) / point_rate, n_markers)
+    marker_names = np.tile(labels, n_frames)
+    x = data[0, :, :].T.flatten()
+    y = data[1, :, :].T.flatten()
+    z = data[2, :, :].T.flatten()
     
-    return pl.DataFrame(rows)
+    return pl.DataFrame({
+        "frame": frames.astype(int),
+        "time": times,
+        "marker_name": marker_names,
+        "x": x.astype(float),
+        "y": y.astype(float),
+        "z": z.astype(float),
+        "trial_name": trial_name,
+        "subject_id": subject_id,
+        "session_id": session_id,
+    })
 
 
 def read_forceplates(c3d_path: str | Path, trial_name: str, subject_id: str, session_id: str) -> pl.DataFrame:
@@ -105,59 +104,41 @@ def read_forceplates(c3d_path: str | Path, trial_name: str, subject_id: str, ses
     if not platforms:
         return pl.DataFrame()
     
-    rows = []
+    all_frames = []
+    all_times = []
+    all_fp_names = []
+    all_variables = []
+    all_axes = []
+    all_values = []
+    
     for fp_idx, platform in enumerate(platforms):
         fp_name = f"FP{fp_idx + 1}"
         
-        # Force data (3, n_frames)
-        force = platform.get("force", np.zeros((3, n_frames)))
-        for axis_idx, axis_name in enumerate(["x", "y", "z"]):
-            for frame_idx in range(n_frames):
-                rows.append({
-                    "frame": frame_idx,
-                    "time": frame_idx / point_rate,
-                    "fp_name": fp_name,
-                    "variable": "force",
-                    "axis": axis_name,
-                    "value": float(force[axis_idx, frame_idx]),
-                    "trial_name": trial_name,
-                    "subject_id": subject_id,
-                    "session_id": session_id,
-                })
-        
-        # Moment data (3, n_frames)
-        moment = platform.get("moment", np.zeros((3, n_frames)))
-        for axis_idx, axis_name in enumerate(["x", "y", "z"]):
-            for frame_idx in range(n_frames):
-                rows.append({
-                    "frame": frame_idx,
-                    "time": frame_idx / point_rate,
-                    "fp_name": fp_name,
-                    "variable": "moment",
-                    "axis": axis_name,
-                    "value": float(moment[axis_idx, frame_idx]),
-                    "trial_name": trial_name,
-                    "subject_id": subject_id,
-                    "session_id": session_id,
-                })
-        
-        # COP data (3, n_frames)
-        cop = platform.get("center_of_pressure", np.zeros((3, n_frames)))
-        for axis_idx, axis_name in enumerate(["x", "y", "z"]):
-            for frame_idx in range(n_frames):
-                rows.append({
-                    "frame": frame_idx,
-                    "time": frame_idx / point_rate,
-                    "fp_name": fp_name,
-                    "variable": "cop",
-                    "axis": axis_name,
-                    "value": float(cop[axis_idx, frame_idx]),
-                    "trial_name": trial_name,
-                    "subject_id": subject_id,
-                    "session_id": session_id,
-                })
+        for var_name, var_key in [("force", "force"), ("moment", "moment"), ("cop", "center_of_pressure")]:
+            data = platform.get(var_key, np.zeros((3, n_frames)))
+            
+            for axis_idx, axis_name in enumerate(["x", "y", "z"]):
+                all_frames.extend(range(n_frames))
+                all_times.extend([i / point_rate for i in range(n_frames)])
+                all_fp_names.extend([fp_name] * n_frames)
+                all_variables.extend([var_name] * n_frames)
+                all_axes.extend([axis_name] * n_frames)
+                all_values.extend(data[axis_idx, :].tolist())
     
-    return pl.DataFrame(rows) if rows else pl.DataFrame()
+    if not all_frames:
+        return pl.DataFrame()
+    
+    return pl.DataFrame({
+        "frame": all_frames,
+        "time": all_times,
+        "fp_name": all_fp_names,
+        "variable": all_variables,
+        "axis": all_axes,
+        "value": all_values,
+        "trial_name": trial_name,
+        "subject_id": subject_id,
+        "session_id": session_id,
+    })
 
 
 def read_events(c3d_path: str | Path, trial_name: str, subject_id: str, session_id: str) -> pl.DataFrame:
@@ -172,21 +153,25 @@ def read_events(c3d_path: str | Path, trial_name: str, subject_id: str, session_
     labels = get_param_strings(c3d, ["EVENT", "LABELS"])
     times = get_param_list(c3d, ["EVENT", "TIMES"])
     
-    rows = []
-    if times is not None and len(times.shape) == 2:
-        point_rate = get_param(c3d, ["POINT", "RATE"], default=100.0)
-        for i in range(len(labels)):
-            time = times[0, i] + times[1, i] / 60.0  # Convert to seconds
-            rows.append({
-                "context": contexts[i] if i < len(contexts) else "",
-                "label": labels[i] if i < len(labels) else "",
-                "time": float(time),
-                "trial_name": trial_name,
-                "subject_id": subject_id,
-                "session_id": session_id,
-            })
+    if times is None or len(times.shape) != 2 or times.shape[1] == 0:
+        return pl.DataFrame()
     
-    return pl.DataFrame(rows) if rows else pl.DataFrame()
+    # Convert times to seconds
+    times_sec = times[0, :] + times[1, :] / 60.0
+    
+    # Pad contexts and labels to match times length
+    n_events = times.shape[1]
+    contexts = contexts[:n_events] + [""] * (n_events - len(contexts))
+    labels = labels[:n_events] + [""] * (n_events - len(labels))
+    
+    return pl.DataFrame({
+        "context": contexts,
+        "label": labels,
+        "time": times_sec.tolist(),
+        "trial_name": trial_name,
+        "subject_id": subject_id,
+        "session_id": session_id,
+    })
 
 
 def read_session_params(c3d_path: str | Path) -> dict:
