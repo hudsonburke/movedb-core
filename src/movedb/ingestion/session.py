@@ -64,8 +64,8 @@ def process_session(
     Also extracts PROCESSING parameters (mass, bone lengths) from C3D files
     and writes them to sessions.parquet for use in model scaling.
     """
-    from ..adapters.c3d import extract_markers, extract_forceplates, extract_events
-    from ..adapters.polars import markers_to_polars, forceplates_to_polars, events_to_polars
+    from .adapters.c3d import extract_markers, extract_forceplates, extract_events
+    from .adapters.polars import markers_to_polars, forceplates_to_polars, events_to_polars
     import ezc3d
 
     output_dir = Path(output_dir)
