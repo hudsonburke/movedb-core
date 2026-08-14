@@ -2,6 +2,6 @@
 
 from .catalog import MoveDB
 
-from .schemas import Markers, Forceplates, Events, Sessions
+from .schemas import TrialMetadata, Markers, Forceplates, Events, Parameters
 
-__all__ = ["MoveDB", "Markers", "Forceplates", "Events", "Sessions"]
+__all__ = ["MoveDB", "TrialMetadata", "Markers", "Forceplates", "Events", "Parameters"]

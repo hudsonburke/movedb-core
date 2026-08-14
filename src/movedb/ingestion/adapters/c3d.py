@@ -13,7 +13,7 @@ import ezc3d
 import numpy as np
 import polars as pl
 
-from movedb.schemas.models import Events, Forceplates, Markers
+from movedb.schemas.models import EventsData, ForceplatesData, MarkersData
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +54,12 @@ def get_param(c3d: ezc3d.c3d, keys: list[str], index: int = 0, default=None):
     return value if value is not None else default
 
 
-def read_session_params(c3d_path: str | Path) -> dict:
-    """Extract PROCESSING parameters from C3D file.
+def read_parameters(c3d_path: str | Path) -> dict:
+    """Extract PROCESSING parameters from a C3D file.
 
     Returns dict of parameter name -> value (float or str).
+    Each C3D file contains trial-level parameters (e.g. Mass, bone lengths)
+    that are typically consistent across trials in a session.
     """
     c3d = ezc3d.c3d(str(c3d_path))
 
@@ -114,7 +116,7 @@ def read_markers(
     y = data[1, :, :].T.flatten()
     z = data[2, :, :].T.flatten()
 
-    return Markers.DataFrame(
+    return MarkersData.DataFrame(
         {
             "frame": frames.astype(int),
             "time": times,
@@ -181,7 +183,7 @@ def read_forceplates(
     if not frames_parts:
         return pl.DataFrame()
 
-    return Forceplates.DataFrame(
+    return ForceplatesData.DataFrame(
         {
             "frame": np.concatenate(frames_parts).astype(int),
             "time": np.concatenate(times_parts),
@@ -219,7 +221,7 @@ def read_events(
     contexts = contexts[:n_events] + [""] * (n_events - len(contexts))
     labels = labels[:n_events] + [""] * (n_events - len(labels))
 
-    return Events.DataFrame(
+    return EventsData.DataFrame(
         {
             "context": contexts,
             "label": labels,

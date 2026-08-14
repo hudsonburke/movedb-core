@@ -1,5 +1,5 @@
 """Patito schema definitions for motion capture data."""
 
-from .models import Markers, Forceplates, Events, Sessions
+from .models import TrialMetadata, Markers, Forceplates, Events, Parameters
 
-__all__ = ["Markers", "Forceplates", "Events", "Sessions"]
+__all__ = ["TrialMetadata", "Markers", "Forceplates", "Events", "Parameters"]
