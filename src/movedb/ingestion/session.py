@@ -64,8 +64,8 @@ def process_session(
     Also extracts PROCESSING parameters (mass, bone lengths) from C3D files
     and writes them to sessions.parquet for use in model scaling.
     """
-    from .adapters.c3d import extract_markers, extract_forceplates, extract_events
-    from .adapters.polars import markers_to_polars, forceplates_to_polars, events_to_polars
+    from .adapters.c3d import read_markers, read_forceplates, read_events, read_session_params
+    # Polars conversion now handled by c3d.py adapter
     import ezc3d
 
     output_dir = Path(output_dir)
@@ -85,8 +85,8 @@ def process_session(
             c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
 
             # Extract markers
-            marker_data = extract_markers(c3d)
-            markers_df = markers_to_polars(marker_data, format="long", trial_name=trial_name)
+            # Markers already read as DataFrame in c3d adapter
+            markers_df = read_markers(c3d_path, trial_name, subject_id, session)
             markers_df = markers_df.with_columns([
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
@@ -96,8 +96,8 @@ def process_session(
 
             # Extract force plates
             try:
-                fp_data = extract_forceplates(c3d)
-                fp_df = forceplates_to_polars(fp_data, format="long", trial_name=trial_name)
+                # Forceplates already read as DataFrame in c3d adapter
+                fp_df = read_forceplates(c3d_path, trial_name, subject_id, session)
                 fp_df = fp_df.with_columns([
                     pl.lit(subject_id).alias("subject_id"),
                     pl.lit(session).alias("session_id"),
@@ -108,8 +108,8 @@ def process_session(
                 logger.debug(f"  {trial_name}: no force plate data: {e}")
 
             # Extract events
-            events = extract_events(c3d)
-            events_df = events_to_polars(events, trial_name=trial_name)
+            # Events already read as DataFrame in c3d adapter
+            events_df = read_events(c3d_path, trial_name, subject_id, session)
             events_df = events_df.with_columns([
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
@@ -119,7 +119,7 @@ def process_session(
                 all_events.append(events_df)
 
             # Extract session parameters
-            session_params = extract_session_params(c3d_path)
+            session_params = read_session_params(c3d_path)
             if session_params:
                 session_params["subject_id"] = subject_id
                 session_params["session_id"] = session
