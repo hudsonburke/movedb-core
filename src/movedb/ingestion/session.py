@@ -29,30 +29,6 @@ def _ensure_string_types(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def extract_session_params(c3d_path: Path) -> dict[str, float | str]:
-    """Extract all PROCESSING parameters from a C3D file."""
-    import ezc3d
-
-    c3d = ezc3d.c3d(str(c3d_path))
-
-    params = {}
-    if "PROCESSING" not in c3d.parameters:
-        return params
-
-    for param_name, param_info in c3d.parameters["PROCESSING"].items():
-        value = param_info.get("value")
-        if value and len(value) > 0:
-            val = value[0]
-            if val is None:
-                continue
-            try:
-                params[param_name] = float(val)
-            except (ValueError, TypeError):
-                params[param_name] = str(val)
-
-    return params
-
-
 def process_session(
     subject_id: str,
     session: str,
@@ -65,8 +41,6 @@ def process_session(
     and writes them to sessions.parquet for use in model scaling.
     """
     from .adapters.c3d import read_markers, read_forceplates, read_events, read_session_params
-    # Polars conversion now handled by c3d.py adapter
-    import ezc3d
 
     output_dir = Path(output_dir)
     subject_dir = output_dir / subject_id
@@ -82,11 +56,8 @@ def process_session(
         trial_name = c3d_path.stem
 
         try:
-            c3d = ezc3d.c3d(str(c3d_path), extract_forceplat_data=True)
-
             # Extract markers
-            # Markers already read as DataFrame in c3d adapter
-            markers_df = read_markers(c3d_path, trial_name, subject_id, session)
+            markers_df = read_markers(c3d_path, trial_name)
             markers_df = markers_df.with_columns([
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),
@@ -96,8 +67,7 @@ def process_session(
 
             # Extract force plates
             try:
-                # Forceplates already read as DataFrame in c3d adapter
-                fp_df = read_forceplates(c3d_path, trial_name, subject_id, session)
+                fp_df = read_forceplates(c3d_path, trial_name)
                 fp_df = fp_df.with_columns([
                     pl.lit(subject_id).alias("subject_id"),
                     pl.lit(session).alias("session_id"),
@@ -108,8 +78,7 @@ def process_session(
                 logger.debug(f"  {trial_name}: no force plate data: {e}")
 
             # Extract events
-            # Events already read as DataFrame in c3d adapter
-            events_df = read_events(c3d_path, trial_name, subject_id, session)
+            events_df = read_events(c3d_path, trial_name)
             events_df = events_df.with_columns([
                 pl.lit(subject_id).alias("subject_id"),
                 pl.lit(session).alias("session_id"),

@@ -30,7 +30,6 @@ class TestSessionParams:
 
     def test_extract_processing_params(self, tmp_path):
         """Test that PROCESSING parameters are extracted from C3D files."""
-        from movedb.ingestion.session import extract_session_params
 
         # Create a mock C3D file with PROCESSING params
         c3d = create_mock_c3d(
