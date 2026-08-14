@@ -1,15 +1,6 @@
-"""MoveDB: Parquet-based storage and DuckDB catalog for biomechanics data."""
+"""MoveDB — biomechanics data library."""
 
-from . import core
-from . import adapters
-from . import storage
-from . import catalog
-from . import ingestion
+from .catalog import MoveDB
+from .schemas import Markers, Forceplates, Events, Sessions
 
-__all__ = [
-    "core",
-    "adapters",
-    "storage",
-    "catalog",
-    "ingestion",
-]
+__all__ = ["MoveDB", "Markers", "Forceplates", "Events", "Sessions"]
