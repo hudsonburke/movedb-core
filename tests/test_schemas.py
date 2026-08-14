@@ -114,7 +114,7 @@ class TestSessions:
 class TestWithFields:
     def test_extend_schema(self):
         """Test extending schema with .with_fields()."""
-        ForceplatesWithSide = Forceplates.with_fields(side=str)
+        ForceplatesWithSide = Forceplates.with_fields(side=(str, ...))
 
         df = pl.DataFrame(
             {
