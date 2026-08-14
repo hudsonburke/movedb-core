@@ -390,7 +390,10 @@ def read_events(
         return pl.DataFrame()
 
     # Convert times to seconds
-    times_sec = times[0, :] + times[1, :] / 60.0
+    # C3D EVENT:TIMES stores times as (2, n_events):
+    #   Row 0: integer part (seconds)
+    #   Row 1: fractional part (seconds)
+    times_sec = times[0, :] + times[1, :]
 
     # Pad contexts and labels to match times length
     n_events = times.shape[1]
