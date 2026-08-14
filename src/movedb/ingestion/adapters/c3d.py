@@ -187,9 +187,16 @@ def read_forceplates(
     if not platforms:
         return pl.DataFrame()
 
-    var_names = ("force", "moment", "cop")
-    var_keys = ("force", "moment", "center_of_pressure")
+    var_names = ("force", "moment", "cop", "tz")
+    var_keys = ("force", "moment", "center_of_pressure", "Tz")
     axis_names = ("x", "y", "z")
+    
+    # Note: ezc3d's force platform filter provides:
+    # - force: ground reaction force (3, N)
+    # - moment: moment about force plate origin (3, N)
+    # - center_of_pressure: COP location (3, N)
+    # - Tz: free moment about COP (3, N)
+    # We store all four for maximum flexibility.
     n_vars = len(var_names)
     n_axes = len(axis_names)
 
@@ -203,12 +210,18 @@ def read_forceplates(
     for fp_idx, platform in enumerate(platforms):
         fp_name = f"FP{fp_idx + 1}"
 
-        # Stack (3, N) arrays per variable → (n_vars, 3, N),
-        # then reshape + ravel to match var → axis → frame order.
-        # Derive frame count from the actual data, not the point header.
-        stacked = np.stack([platform.get(key, np.zeros((3, 1))) for key in var_keys])
-        n_fp_frames = stacked.shape[2]
-        stacked = stacked.reshape(-1)  # (n_vars * 3 * n_fp_frames,)
+        # Get all force platform data from ezc3d
+        force = platform.get("force", np.zeros((3, 1)))
+        moment = platform.get("moment", np.zeros((3, 1)))
+        cop = platform.get("center_of_pressure", np.zeros((3, 1)))
+        tz = platform.get("Tz", np.zeros((3, 1)))  # Free moment about COP
+        
+        n_fp_frames = force.shape[1]
+        
+        # Stack: force, moment, cop, tz -> (4, 3, N) = (var, axis, frame)
+        stacked = np.stack([force, moment, cop, tz])
+        # Transpose to (frame, var, axis) then reshape to match expected column order
+        stacked = stacked.transpose(2, 0, 1).reshape(-1)  # (n_fp_frames * n_vars * 3,)
 
         n_fp_rows = n_vars * n_axes * n_fp_frames
         frame_idx = np.arange(n_fp_frames)
