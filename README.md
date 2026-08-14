@@ -1,9 +1,12 @@
-<p align="center">
-  <img src="imgs/movedb-logo-cropped.png" alt="MoveDB Logo" width="400"/>
-  <h1 align="center">MoveDB</h1>
-</p>
-
-<h3 align="center">Biomechanics data management with Parquet storage and DuckDB queries</h3>
+<table>
+  <tr>
+    <td><img src="imgs/movedb-logo-cropped.png" alt="MoveDB Logo" width="100"/></td>
+    <td>
+      <h1>MoveDB</h1>
+      <p>Biomechanics data management with Parquet storage and DuckDB queries</p>
+    </td>
+  </tr>
+</table>
 
 ---
 
