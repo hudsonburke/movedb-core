@@ -193,10 +193,11 @@ def read_forceplates(
     
     # Note: ezc3d's force platform filter provides:
     # - force: ground reaction force (3, N)
-    # - moment: moment about force plate origin (3, N)
-    # - center_of_pressure: COP location (3, N)
-    # - Tz: free moment about COP (3, N)
-    # We store all four for maximum flexibility.
+    # - moment: moment about force plate origin (3, N*mm)
+    # - center_of_pressure: COP location (3, mm)
+    # - Tz: free moment about COP (3, N*mm)
+    # We store all four raw outputs without unit conversion. Consumers
+    # (e.g. rat-vml) are responsible for converting to SI units.
     n_vars = len(var_names)
     n_axes = len(axis_names)
 
@@ -220,8 +221,7 @@ def read_forceplates(
         
         # Stack: force, moment, cop, tz -> (4, 3, N) = (var, axis, frame)
         stacked = np.stack([force, moment, cop, tz])
-        # Transpose to (frame, var, axis) then reshape to match expected column order
-        stacked = stacked.transpose(2, 0, 1).reshape(-1)  # (n_fp_frames * n_vars * 3,)
+        stacked = stacked.reshape(-1)  # (n_vars * 3 * n_fp_frames,)
 
         n_fp_rows = n_vars * n_axes * n_fp_frames
         frame_idx = np.arange(n_fp_frames)
