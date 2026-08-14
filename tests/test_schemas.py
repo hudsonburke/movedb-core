@@ -22,7 +22,7 @@ class TestMarkers:
                 "session_id": ["baseline"] * 3,
             }
         )
-        assert Markers.validate(df) is None
+        Markers.validate(df)
 
     def test_from_parquet(self, tmp_path):
         """Test loading from Parquet file."""
@@ -43,8 +43,7 @@ class TestMarkers:
         df.write_parquet(path)
 
         loaded = pl.read_parquet(path)
-        markers = Markers.from_polars(loaded)
-        assert markers is not None
+        Markers.validate(loaded)
 
 
 class TestForceplates:
@@ -63,8 +62,7 @@ class TestForceplates:
                 "session_id": ["baseline"] * 2,
             }
         )
-        fps = Forceplates.validate(df)
-        assert fps is not None
+        Forceplates.validate(df)
 
 
 class TestEvents:
@@ -80,8 +78,7 @@ class TestEvents:
                 "session_id": ["baseline"] * 2,
             }
         )
-        events = Events.validate(df)
-        assert events is not None
+        Events.validate(df)
 
 
 class TestSessions:
@@ -93,12 +90,11 @@ class TestSessions:
                 "session_id": ["baseline"],
             }
         )
-        sessions = Sessions.validate(df)
-        assert sessions is not None
+        Sessions.validate(df)
 
     def test_extend_schema(self):
         """Test extending Sessions with .with_fields()."""
-        RatSessions = Sessions.with_fields(Mass=float, RFemurLength=float)
+        RatSessions = Sessions.with_fields(Mass=(float, ...), RFemurLength=(float, ...))
         df = pl.DataFrame(
             {
                 "subject_id": ["BAA01"],
@@ -107,8 +103,7 @@ class TestSessions:
                 "RFemurLength": [32.0],
             }
         )
-        sessions = RatSessions.validate(df)
-        assert sessions is not None
+        RatSessions.validate(df)
 
 
 class TestWithFields:
@@ -130,5 +125,5 @@ class TestWithFields:
                 "side": ["Left", "Left"],
             }
         )
-        fps = ForceplatesWithSide.validate(df)
-        assert fps is not None
+
+        ForceplatesWithSide.validate(df)
